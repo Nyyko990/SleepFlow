@@ -1,0 +1,18 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(//c/Users/nykom/**)",
+      "Bash(npx create-expo-app *)",
+      "Bash(cp -r /tmp/sleepflow_tmp/App.js /tmp/sleepflow_tmp/app.json /tmp/sleepflow_tmp/index.js /tmp/sleepflow_tmp/package.json /tmp/sleepflow_tmp/package-lock.json /c/Users/nykom/SleepFlow/)",
+      "Bash(cp -r /tmp/sleepflow_tmp/assets/* /c/Users/nykom/SleepFlow/assets/)",
+      "Bash(cp -r /tmp/sleepflow_tmp/node_modules /c/Users/nykom/SleepFlow/)",
+      "Bash(cp -r /tmp/sleepflow_tmp/assets /c/Users/nykom/SleepFlow/)",
+      "Bash(npx expo *)",
+      "Bash(npm install *)",
+      "Bash(echo \"exit: $?\")",
+      "Bash(cmd /c \"rmdir /s /q C:\\\\Users\\\\nykom\\\\SleepFlow\\\\node_modules\")",
+      "Bash(cmd /c \"rmdir /s /q C:\\\\Users\\\\nykom\\\\SleepFlow\\\\node_modules\\\\expo\")",
+      "Bash(kill %1)"
+    ]
+  }
+}
