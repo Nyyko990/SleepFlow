@@ -17,13 +17,15 @@ No test suite is configured yet.
 
 ## Architecture
 
-**SleepFlow** is an Expo-managed React Native sleep/wellness app targeting iOS, Android, and Web.
+**SleepFlow** is an Expo-managed React Native sleep/wellness app (React 19, RN 0.81, Expo 54) targeting iOS, Android, and Web.
 
 ### Routing
 
 Uses **Expo Router** (file-based routing inside `app/`). `app/_layout.tsx` is the root Stack navigator with `headerShown: false`. `app/index.tsx` is the `/` home screen. New screens go in `app/` as files or nested folders.
 
-> `App.js` and `index.js` exist as legacy stubs — the actual app is driven by `app/` via the expo-router plugin in `app.json`.
+`App.js` and `index.js` exist as legacy stubs — the actual app entry is `expo-router/entry` (set in `package.json` `main`).
+
+The app deep-link scheme is `sleepflow` (configured in `app.json`).
 
 ### Key installed dependencies (not yet wired up)
 
@@ -38,12 +40,18 @@ Uses **Expo Router** (file-based routing inside `app/`). `app/_layout.tsx` is th
 
 ### Theme
 
-All colors live in `constants/colors.ts`. The app enforces a dark theme (`userInterfaceStyle: "dark"` in `app.json`). Background is `#0A0A0F`, accent colors are dark blues and purples.
+All colors live in `constants/colors.ts`. The app enforces a dark theme (`userInterfaceStyle: "dark"` in `app.json`). Background is `#0A0A0F`, accent colors are dark blues (`#2D5986`) and purples (`#2D1B4E`).
 
 ### New Architecture
 
 `newArchEnabled: true` is set in `app.json`. Any new native modules must support the React Native New Architecture (Fabric/TurboModules).
 
-### Audio assets
+### TypeScript
 
-Place audio files in `assets/sounds/`. Load them with `expo-av`.
+`tsconfig.json` extends `expo/tsconfig.base` with `strict: true`. All new files should be `.tsx`/`.ts`.
+
+### Placeholder directories
+
+- `components/` — reusable UI components (currently empty)
+- `hooks/` — custom React hooks (currently empty)
+- `assets/sounds/` — audio files loaded via `expo-av` (currently empty)
