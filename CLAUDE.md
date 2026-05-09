@@ -16,7 +16,7 @@ No test suite is configured yet.
 
 ## Architecture
 
-**SleepFlow** is an Expo-managed React Native sleep/wellness app (React 19, RN 0.81, Expo 54) targeting iOS, Android, and Web. The app is in early-stage development — `components/` and `hooks/` directories exist but are currently empty placeholders.
+**SleepFlow** is an Expo-managed React Native sleep/wellness app (React 19, RN 0.81, Expo 54) targeting iOS, Android, and Web.
 
 ### Routing
 
@@ -32,17 +32,19 @@ The app deep-link scheme is `sleepflow` (configured in `app.json`).
 - `develop` — integration branch; PRs target `develop`, not `main`
 - `feature/*` — feature branches cut from `develop`
 
-### Key installed dependencies (not yet wired up)
+### Key dependencies
 
 | Package | Purpose |
 |---|---|
-| `expo-av` | Audio playback (sleep sounds — `assets/sounds/` is the target directory) |
+| `expo-av` | Audio playback — sound files live in `assets/sounds/` |
+| `@react-native-community/slider` | Volume slider in `SoundCard` |
 | `expo-notifications` | Push/local notifications |
-| `@react-native-async-storage/async-storage` | Local persistence |
-| `react-native-reanimated` v4 | Animations (Babel plugin already configured in `babel.config.js`) |
-| `react-native-worklets` | Required peer dep for reanimated v4 — Expo SDK 54 expects v0.5.1 (not latest); must be listed explicitly in `dependencies` |
+| `@react-native-async-storage/async-storage` | Local persistence — used to save per-sound volumes across sessions |
+| `react-native-reanimated` v4 | Animations — Babel plugin registered in `babel.config.js` |
+| `react-native-worklets` | Required peer dep for reanimated v4 — pinned to v0.5.1 for Expo SDK 54 compatibility; must stay explicit in `dependencies` |
 | `expo-linking` | Deep-link URL parsing — required by Expo Router |
 | `react-native-safe-area-context` | Safe area insets — required for Android edge-to-edge (`edgeToEdgeEnabled: true`) |
+| `react-native-screens` | Native navigation primitives — required by Expo Router |
 | `react-native-google-mobile-ads` | AdMob ads |
 | `react-native-iap` | In-app purchases |
 
@@ -54,6 +56,7 @@ All colors live in `constants/colors.ts` and are consumed via named tokens:
 |---|---|---|
 | `colors.background` | `#0A0A0F` | Screen backgrounds |
 | `colors.surface` | `#0D0D1A` | Card/panel surfaces |
+| `colors.surfaceActive` | `#0F1121` | Active/selected card state |
 | `colors.accentBlue` | `#2D5986` | Primary accent |
 | `colors.accentPurple` | `#2D1B4E` | Secondary accent |
 | `colors.textPrimary` | `#E8E8F0` | Main text |
@@ -61,6 +64,20 @@ All colors live in `constants/colors.ts` and are consumed via named tokens:
 | `colors.border` | `#1A1A2E` | Dividers and borders |
 
 The app enforces dark theme (`userInterfaceStyle: "dark"` in `app.json`). Always import from `constants/colors` — never hardcode hex values in component files.
+
+### Sound mixer
+
+The sound mixer is the core Phase 1 feature. Data flows: `constants/sounds.ts` → `hooks/useSoundPlayer.ts` → `app/index.tsx` → `components/SoundCard.tsx`.
+
+- **`constants/sounds.ts`** — `SOUNDS: SoundDef[]` is the single source of truth for available sounds. Each entry has `id`, `name`, `icon` (Ionicons name), and `file` (Metro asset `require`). Entries with `isEmpty: true` are grid spacers with no playback logic; filter them out with `s.isEmpty` before processing.
+- **`hooks/useSoundPlayer.ts`** — manages `expo-av` `Audio.Sound` instances (preloaded at mount, looping). Exposes `{ active, volumes, toggle, setVolume }`. `toggle` fades in/out over ~1.5 s / 1 s using `setInterval`. Per-sound volumes are persisted to AsyncStorage under the key `sf_vol_<id>` and restored on mount. Cancels any running fade when the user manually drags the slider.
+- **`components/SoundCard.tsx`** — `memo`-wrapped card; wraps `<Slider>` in a `<View onStartShouldSetResponder>` to prevent slider drag events from bubbling up to the card's `onPress` toggle. Tap = toggle playback; long-press = open `SoundModal`.
+- **`components/SoundModal.tsx`** — full-screen overlay opened via long-press on a `SoundCard`. Shows icon, name, large play/pause button, and volume slider. Uses `mountedId` (lags behind `expandedId`) so content stays visible during the close animation. Animated with a backdrop fade + spring scale.
+- **`components/LoadingScreen.tsx`** — absolute-fill splash shown while `useSoundPlayer` preloads sounds (`isReady === false`). Fades out over 600 ms once ready. Uses staggered `Animated.loop` dots.
+
+`useSoundPlayer` exposes `{ active, volumes, toggle, setVolume, isReady }`. `isReady` turns `true` once all `Audio.Sound` instances finish preloading; the home screen uses it to trigger the loading fade-out.
+
+The home screen (`app/index.tsx`) reserves a `timerArea` View at the bottom for the Phase 2 sleep timer — it is intentionally empty.
 
 ### New Architecture
 

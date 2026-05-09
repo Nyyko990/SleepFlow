@@ -1,0 +1,161 @@
+
+<style>
+  .planner { padding: 1rem 0; font-family: var(--font-sans); }
+  .phase-card { border: 1px solid var(--color-border-tertiary); border-radius: var(--border-radius-lg); margin-bottom: 12px; overflow: hidden; }
+  .phase-header { display: flex; align-items: center; gap: 12px; padding: 12px 16px; cursor: pointer; user-select: none; }
+  .phase-header:hover { background: var(--color-background-secondary); }
+  .phase-badge { width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 500; flex-shrink: 0; }
+  .phase-title { flex: 1; }
+  .phase-title h3 { font-size: 15px; font-weight: 500; color: var(--color-text-primary); margin: 0 0 2px; }
+  .phase-title span { font-size: 12px; color: var(--color-text-secondary); }
+  .phase-dates { font-size: 11px; color: var(--color-text-tertiary); text-align: right; white-space: nowrap; }
+  .chevron { font-size: 12px; color: var(--color-text-tertiary); transition: transform 0.2s; }
+  .chevron.open { transform: rotate(90deg); }
+  .phase-body { display: none; padding: 0 16px 14px; border-top: 1px solid var(--color-border-tertiary); }
+  .phase-body.open { display: block; }
+  .task-list { list-style: none; padding: 0; margin: 10px 0 0; }
+  .task-list li { display: flex; align-items: flex-start; gap: 8px; padding: 6px 0; border-bottom: 1px solid var(--color-border-tertiary); font-size: 13px; color: var(--color-text-secondary); }
+  .task-list li:last-child { border-bottom: none; }
+  .task-icon { color: var(--color-text-tertiary); font-size: 14px; margin-top: 1px; flex-shrink: 0; }
+  .progress-bar { height: 4px; background: var(--color-border-tertiary); border-radius: 2px; margin: 0 16px 12px; }
+  .progress-fill { height: 100%; border-radius: 2px; transition: width 0.3s; }
+  .legend { display: flex; gap: 16px; margin-bottom: 14px; flex-wrap: wrap; }
+  .legend-item { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--color-text-secondary); }
+  .legend-dot { width: 10px; height: 10px; border-radius: 50%; }
+</style>
+<div class="planner">
+  <div class="legend">
+    <div class="legend-item"><div class="legend-dot" style="background:#534AB7"></div>Setup</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#1D9E75"></div>Core features</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#BA7517"></div>Monetización</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#185FA5"></div>Launch</div>
+  </div>
+
+  <div class="phase-card">
+    <div class="phase-header" onclick="toggle(0)">
+      <div class="phase-badge" style="background:#EEEDFE;color:#534AB7">0</div>
+      <div class="phase-title"><h3>Setup del proyecto</h3><span>Expo + VSCode + GitHub</span></div>
+      <div class="phase-dates">Mayo 7–14</div>
+      <span class="chevron" id="ch0">›</span>
+    </div>
+    <div class="progress-bar"><div class="progress-fill" style="background:#534AB7;width:0%"></div></div>
+    <div class="phase-body" id="pb0">
+      <ul class="task-list">
+        <li><i class="ti ti-circle task-icon"></i>Instalar Node.js, Expo CLI y EAS CLI</li>
+        <li><i class="ti ti-circle task-icon"></i>Crear repo en GitHub: <code>sleepflow-app</code></li>
+        <li><i class="ti ti-circle task-icon"></i>Crear branches: <code>main</code>, <code>develop</code></li>
+        <li><i class="ti ti-circle task-icon"></i>Scaffold con <code>npx create-expo-app sleepflow</code></li>
+        <li><i class="ti ti-circle task-icon"></i>Instalar dependencias base (expo-av, AsyncStorage, expo-router)</li>
+        <li><i class="ti ti-circle task-icon"></i>Primer commit y push a GitHub</li>
+        <li><i class="ti ti-circle task-icon"></i>Probar en celular con Expo Go (QR scan)</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="phase-card">
+    <div class="phase-header" onclick="toggle(1)">
+      <div class="phase-badge" style="background:#E1F5EE;color:#0F6E56">1</div>
+      <div class="phase-title"><h3>Pantalla principal + Sound Mixer</h3><span>Feature core de la app</span></div>
+      <div class="phase-dates">Mayo 15 – Jun 4</div>
+      <span class="chevron" id="ch1">›</span>
+    </div>
+    <div class="progress-bar"><div class="progress-fill" style="background:#1D9E75;width:0%"></div></div>
+    <div class="phase-body" id="pb1">
+      <ul class="task-list">
+        <li><i class="ti ti-circle task-icon"></i>Diseño de la pantalla principal (tema oscuro, azul/púrpura)</li>
+        <li><i class="ti ti-circle task-icon"></i>Integrar los 5 sonidos gratuitos con expo-av (loop seamless)</li>
+        <li><i class="ti ti-circle task-icon"></i>Card por sonido con botón play/stop + volumen slider</li>
+        <li><i class="ti ti-circle task-icon"></i>Mezcla simultánea de múltiples sonidos</li>
+        <li><i class="ti ti-circle task-icon"></i>Fade-in al activar un sonido</li>
+        <li><i class="ti ti-circle task-icon"></i>Branch: <code>feature/sound-mixer</code> → merge a develop</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="phase-card">
+    <div class="phase-header" onclick="toggle(2)">
+      <div class="phase-badge" style="background:#E1F5EE;color:#0F6E56">2</div>
+      <div class="phase-title"><h3>Sleep Timer + Screen-off mode</h3><span>Funcionalidad de sueño</span></div>
+      <div class="phase-dates">Jun 5–25</div>
+      <span class="chevron" id="ch2">›</span>
+    </div>
+    <div class="progress-bar"><div class="progress-fill" style="background:#1D9E75;width:0%"></div></div>
+    <div class="phase-body" id="pb2">
+      <ul class="task-list">
+        <li><i class="ti ti-circle task-icon"></i>Timer con opciones: 15, 30, 45min, 1h, 2h, custom</li>
+        <li><i class="ti ti-circle task-icon"></i>Fade-out gradual al terminar el timer</li>
+        <li><i class="ti ti-circle task-icon"></i>Audio en background con pantalla apagada (expo-av background mode)</li>
+        <li><i class="ti ti-circle task-icon"></i>Botón "Sleep Now" que oscurece la pantalla a negro</li>
+        <li><i class="ti ti-circle task-icon"></i>Branch: <code>feature/sleep-timer</code> → merge a develop</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="phase-card">
+    <div class="phase-header" onclick="toggle(3)">
+      <div class="phase-badge" style="background:#E1F5EE;color:#0F6E56">3</div>
+      <div class="phase-title"><h3>Notificación de hora de dormir</h3><span>Recordatorio nocturno</span></div>
+      <div class="phase-dates">Jun 26 – Jul 10</div>
+      <span class="chevron" id="ch3">›</span>
+    </div>
+    <div class="progress-bar"><div class="progress-fill" style="background:#1D9E75;width:0%"></div></div>
+    <div class="phase-body" id="pb3">
+      <ul class="task-list">
+        <li><i class="ti ti-circle task-icon"></i>Toggle on/off de notificación diaria</li>
+        <li><i class="ti ti-circle task-icon"></i>Time picker para la hora de la notificación</li>
+        <li><i class="ti ti-circle task-icon"></i>Mensaje personalizable (ej: "Time to sleep 🌙")</li>
+        <li><i class="ti ti-circle task-icon"></i>Guardar preferencia con AsyncStorage</li>
+        <li><i class="ti ti-circle task-icon"></i>Branch: <code>feature/bedtime-notification</code> → merge a develop</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="phase-card">
+    <div class="phase-header" onclick="toggle(4)">
+      <div class="phase-badge" style="background:#FAEEDA;color:#854F0B">4</div>
+      <div class="phase-title"><h3>Monetización</h3><span>AdMob + sonidos premium</span></div>
+      <div class="phase-dates">Jul 11 – Aug 1</div>
+      <span class="chevron" id="ch4">›</span>
+    </div>
+    <div class="progress-bar"><div class="progress-fill" style="background:#BA7517;width:0%"></div></div>
+    <div class="phase-body" id="pb4">
+      <ul class="task-list">
+        <li><i class="ti ti-circle task-icon"></i>Integrar AdMob (banner en pantalla principal)</li>
+        <li><i class="ti ti-circle task-icon"></i>Agregar 3 sonidos premium bloqueados (Viento, Truenos, Café)</li>
+        <li><i class="ti ti-circle task-icon"></i>Lock icon overlay + pantalla de compra</li>
+        <li><i class="ti ti-circle task-icon"></i>In-app purchase: "Unlock All Sounds — $1.99" con react-native-iap</li>
+        <li><i class="ti ti-circle task-icon"></i>Branch: <code>feature/monetization</code> → merge a develop</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="phase-card">
+    <div class="phase-header" onclick="toggle(5)">
+      <div class="phase-badge" style="background:#E6F1FB;color:#185FA5">5</div>
+      <div class="phase-title"><h3>Polish + Testing + Launch</h3><span>Publicación en Play Store & App Store</span></div>
+      <div class="phase-dates">Ago 2 – Sep 29</div>
+      <span class="chevron" id="ch5">›</span>
+    </div>
+    <div class="progress-bar"><div class="progress-fill" style="background:#185FA5;width:0%"></div></div>
+    <div class="phase-body" id="pb5">
+      <ul class="task-list">
+        <li><i class="ti ti-circle task-icon"></i>Testing en dispositivos reales (Android + iOS)</li>
+        <li><i class="ti ti-circle task-icon"></i>Icono de app, splash screen, screenshots para tiendas</li>
+        <li><i class="ti ti-circle task-icon"></i>Build con EAS Build (eas build --platform all)</li>
+        <li><i class="ti ti-circle task-icon"></i>Publicar en Google Play Store</li>
+        <li><i class="ti ti-circle task-icon"></i>Publicar en Apple App Store</li>
+        <li><i class="ti ti-circle task-icon"></i>ASO: título, descripción y keywords optimizados</li>
+        <li><i class="ti ti-circle task-icon"></i>Merge develop → main, tag v1.0.0</li>
+      </ul>
+    </div>
+  </div>
+</div>
+<script>
+function toggle(i) {
+  const body = document.getElementById('pb' + i);
+  const ch = document.getElementById('ch' + i);
+  const isOpen = body.classList.contains('open');
+  body.classList.toggle('open', !isOpen);
+  ch.classList.toggle('open', !isOpen);
+}
+</script>

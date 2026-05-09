@@ -14,7 +14,8 @@
       "Bash(cmd /c \"rmdir /s /q C:\\\\Users\\\\nykom\\\\SleepFlow\\\\node_modules\\\\expo\")",
       "Bash(kill %1)",
       "Bash(node *)",
-      "Bash(npm start *)"
+      "Bash(npm start *)",
+      "Bash(npx tsc *)"
     ]
   }
 }
