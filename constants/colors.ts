@@ -7,4 +7,7 @@ export const colors = {
   textPrimary: '#E8E8F0',
   textSecondary: '#8888A0',
   border: '#1A1A2E',
+  cardGlow: '#2D5986',
+  pillActive: '#1E3A5F',
+  tabActive: '#4A7CB5',
 };

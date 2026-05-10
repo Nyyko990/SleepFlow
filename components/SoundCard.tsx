@@ -36,6 +36,9 @@ const SoundCard = memo(function SoundCard({
         color={isActive ? colors.accentBlue : colors.textSecondary}
       />
       <Text style={[styles.name, isActive && styles.nameActive]}>{sound.name}</Text>
+      {sound.subtitle ? (
+        <Text style={styles.subtitle}>{sound.subtitle}</Text>
+      ) : null}
       {/* Wrapped in View to prevent slider touches from propagating to card's onPress */}
       <View onStartShouldSetResponder={() => true} style={styles.sliderWrapper}>
         <Slider
@@ -60,29 +63,43 @@ const styles = StyleSheet.create({
   card: {
     flex: 1,
     margin: 5,
-    paddingTop: 16,
+    paddingTop: 14,
     paddingBottom: 8,
-    paddingHorizontal: 6,
+    paddingHorizontal: 10,
     borderRadius: 16,
     backgroundColor: colors.surface,
     borderWidth: 1.5,
     borderColor: colors.border,
     alignItems: 'center',
+    shadowColor: colors.cardGlow,
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 4,
   },
   cardActive: {
     borderColor: colors.accentBlue,
     backgroundColor: colors.surfaceActive,
+    shadowOpacity: 0.4,
   },
   name: {
     color: colors.textSecondary,
-    fontSize: 11,
-    fontWeight: '500',
+    fontSize: 13,
+    fontWeight: '400',
     marginTop: 7,
-    marginBottom: 2,
+    marginBottom: 1,
     textAlign: 'center',
   },
   nameActive: {
     color: colors.textPrimary,
+  },
+  subtitle: {
+    color: colors.textSecondary,
+    fontSize: 9,
+    fontWeight: '400',
+    marginBottom: 1,
+    textAlign: 'center',
+    opacity: 0.7,
   },
   sliderWrapper: {
     width: '100%',

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Audio } from 'expo-av';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { SOUNDS } from '../constants/sounds';
+import type { SoundDef } from '../constants/sounds';
 
 const VOL_KEY = 'sf_vol_';
 const DEFAULT_VOL = 0.7;
@@ -9,9 +9,11 @@ const FADE_IN_MS = 1500;
 const FADE_OUT_MS = 1000;
 const FADE_STEPS = 30;
 
-const PLAYABLE = SOUNDS.filter(s => !s.isEmpty);
+export function useSoundPlayer(sounds: SoundDef[]) {
+  // Captured once at mount — sounds should always be a stable module-level constant
+  const playableRef = useRef<SoundDef[]>(sounds.filter(s => !s.isEmpty));
+  const PLAYABLE = playableRef.current;
 
-export function useSoundPlayer() {
   const soundRefs = useRef<Record<string, Audio.Sound | null>>({});
   const timerRefs = useRef<Record<string, ReturnType<typeof setInterval> | null>>({});
 
@@ -80,7 +82,7 @@ export function useSoundPlayer() {
       Object.values(timerRefs.current).forEach(t => t && clearInterval(t));
       Object.values(soundRefs.current).forEach(s => s?.unloadAsync());
     };
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const clearTimer = useCallback((id: string) => {
     if (timerRefs.current[id]) {
