@@ -11,8 +11,10 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { colors } from '../constants/colors';
-import { SOUNDS, type SoundDef } from '../constants/sounds';
+import { SOLAR_SOUNDS } from '../constants/solarSounds';
+import type { SoundDef } from '../constants/sounds';
 import SoundCard from '../components/SoundCard';
 import { LoadingScreen } from '../components/LoadingScreen';
 import { SoundModal } from '../components/SoundModal';
@@ -20,16 +22,41 @@ import { RecordingModal } from '../components/RecordingModal';
 import { FeaturedBanner } from '../components/FeaturedBanner';
 import { BottomNav } from '../components/BottomNav';
 import { useSoundPlayer } from '../hooks/useSoundPlayer';
-import { useRecordingPlayer } from '../hooks/useRecordingPlayer';
+import { useAudio } from '../context/AudioContext';
 
 const ADD_BUTTON_ID = '__add';
+const FAVORITES_KEY = 'favorite_sounds';
+
 const FILTER_LABELS = ['All', 'Nature', 'Space', 'Personal'] as const;
 type FilterLabel = (typeof FILTER_LABELS)[number];
 
 type GridItem = SoundDef | { id: string; isEmpty: true } | { id: '__add' };
 
-function buildGridData(soundDefs: SoundDef[]): GridItem[] {
-  const withAdd = [...soundDefs, { id: ADD_BUTTON_ID } as GridItem];
+const DISCOVER_CARDS = [
+  {
+    icon: 'leaf-outline' as const,
+    title: 'Breathing',
+    subtitle: '4 techniques to sleep faster',
+    path: '/breathe',
+  },
+  {
+    icon: 'book-outline' as const,
+    title: 'Sleep Stories',
+    subtitle: 'Let your mind drift away',
+    path: '/stories',
+  },
+  {
+    icon: 'planet-outline' as const,
+    title: 'Solar System',
+    subtitle: 'Ancient gods of the night sky',
+    path: '/solar-system',
+  },
+];
+
+function buildGridData(soundDefs: SoundDef[], includeAdd: boolean): GridItem[] {
+  const withAdd: GridItem[] = includeAdd
+    ? [...soundDefs, { id: ADD_BUTTON_ID }]
+    : [...soundDefs];
   const remainder = withAdd.length % 3;
   const padCount = remainder === 0 ? 0 : 3 - remainder;
   const pads: GridItem[] = Array.from({ length: padCount }, (_, i) => ({
@@ -41,17 +68,21 @@ function buildGridData(soundDefs: SoundDef[]): GridItem[] {
 
 export default function HomeScreen() {
   const insets = useSafeAreaInsets();
-  const { active, volumes, toggle, setVolume, isReady } = useSoundPlayer(SOUNDS);
   const {
-    soundDefs: recSoundDefs,
+    allSounds,
+    allActive,
+    allVolumes,
+    handleToggle,
+    handleSetVolume,
+    isReady,
     recordings,
-    active: recActive,
-    volumes: recVolumes,
-    toggle: recToggle,
-    setVolume: recSetVolume,
     addRecording,
     deleteRecording,
-  } = useRecordingPlayer();
+  } = useAudio();
+
+  // Solar sounds player — all file:null, no audio loaded, immediately ready
+  const { active: solarActive, volumes: solarVolumes, toggle: solarToggle, setVolume: solarSetVolume } =
+    useSoundPlayer(SOLAR_SOUNDS);
 
   // Loading screen fade-out
   const loadingOpacity = useRef(new Animated.Value(1)).current;
@@ -70,51 +101,60 @@ export default function HomeScreen() {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [showRecordingModal, setShowRecordingModal] = useState(false);
   const [activeFilter, setActiveFilter] = useState<FilterLabel>('All');
+  const [favorites, setFavorites] = useState<string[]>([]);
 
-  const allSounds: SoundDef[] = useMemo(
-    () => [...SOUNDS, ...recSoundDefs],
-    [recSoundDefs],
-  );
+  useEffect(() => {
+    AsyncStorage.getItem(FAVORITES_KEY).then(v => {
+      if (v) setFavorites(JSON.parse(v) as string[]);
+    });
+  }, []);
 
-  const filteredSounds: SoundDef[] = useMemo(() => {
-    switch (activeFilter) {
-      case 'Nature':
-        return allSounds.filter(s => !s.isUserRecording);
-      case 'Personal':
-        return allSounds.filter(s => s.isUserRecording);
-      default:
-        return allSounds;
-    }
-  }, [allSounds, activeFilter]);
-
-  const allActive = useMemo(() => ({ ...active, ...recActive }), [active, recActive]);
-  const allVolumes = useMemo(() => ({ ...volumes, ...recVolumes }), [volumes, recVolumes]);
-
-  const handleToggle = useCallback(
-    (id: string) => {
-      if (recActive[id] !== undefined) recToggle(id);
-      else toggle(id);
-    },
-    [active, recActive, toggle, recToggle],
-  );
-
-  const handleSetVolume = useCallback(
-    (id: string, v: number) => {
-      if (recVolumes[id] !== undefined) recSetVolume(id, v);
-      else setVolume(id, v);
-    },
-    [recVolumes, recSetVolume, setVolume],
-  );
+  const toggleFavorite = useCallback((id: string) => {
+    setFavorites(prev => {
+      const next = prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id];
+      AsyncStorage.setItem(FAVORITES_KEY, JSON.stringify(next));
+      return next;
+    });
+  }, []);
 
   const handlePillPress = useCallback((label: string) => {
-    if (label === 'Space') {
-      router.push('/solar-system');
-      return;
-    }
     setActiveFilter(label as FilterLabel);
   }, []);
 
-  const gridData = useMemo(() => buildGridData(filteredSounds), [filteredSounds]);
+  // Determine which sounds/controls to show based on active filter
+  const isSpaceFilter = activeFilter === 'Space';
+  const isAllFilter = activeFilter === 'All';
+
+  const currentActive = isSpaceFilter ? solarActive : allActive;
+  const currentVolumes = isSpaceFilter ? solarVolumes : allVolumes;
+  const currentToggle = isSpaceFilter ? solarToggle : handleToggle;
+  const currentSetVolume = isSpaceFilter ? solarSetVolume : handleSetVolume;
+
+  const gridSounds: SoundDef[] = useMemo(() => {
+    switch (activeFilter) {
+      case 'Nature':
+        return allSounds.filter(s => s.category === 'nature');
+      case 'Personal':
+        return allSounds.filter(s => s.isUserRecording);
+      case 'Space':
+        return SOLAR_SOUNDS;
+      default:
+        return allSounds;
+    }
+  }, [activeFilter, allSounds]);
+
+  const gridData = useMemo(
+    () => buildGridData(gridSounds, !isSpaceFilter),
+    [gridSounds, isSpaceFilter],
+  );
+
+  const favoriteSounds = useMemo(
+    () => allSounds.filter(s => favorites.includes(s.id)),
+    [allSounds, favorites],
+  );
+
+  // Modal sound pool — use solar sounds when Space filter is active
+  const modalSounds = isSpaceFilter ? SOLAR_SOUNDS : allSounds;
 
   const renderItem = useCallback(
     ({ item }: { item: GridItem }) => {
@@ -136,26 +176,113 @@ export default function HomeScreen() {
       return (
         <SoundCard
           sound={sound}
-          isActive={allActive[sound.id] ?? false}
-          volume={allVolumes[sound.id] ?? 0.7}
-          onToggle={() => handleToggle(sound.id)}
-          onVolumeChange={v => handleSetVolume(sound.id, v)}
+          isActive={currentActive[sound.id] ?? false}
+          volume={currentVolumes[sound.id] ?? 0.7}
+          onToggle={() => currentToggle(sound.id)}
+          onVolumeChange={v => currentSetVolume(sound.id, v)}
           onLongPress={() => setExpandedId(sound.id)}
+          isFavorite={!isSpaceFilter ? favorites.includes(sound.id) : undefined}
+          onFavoriteToggle={!isSpaceFilter ? () => toggleFavorite(sound.id) : undefined}
         />
       );
     },
-    [allActive, allVolumes, handleToggle, handleSetVolume],
+    [
+      currentActive,
+      currentVolumes,
+      currentToggle,
+      currentSetVolume,
+      isSpaceFilter,
+      favorites,
+      toggleFavorite,
+    ],
   );
+
+  const sectionLabel = useMemo(() => {
+    switch (activeFilter) {
+      case 'Nature': return 'NATURE';
+      case 'Space': return 'SOLAR SYSTEM';
+      case 'Personal': return 'PERSONAL';
+      default: return 'ALL SOUNDS';
+    }
+  }, [activeFilter]);
 
   const ListHeader = useMemo(
     () => (
       <>
-        <FeaturedBanner />
-        <Text style={styles.sectionLabel}>YOUR SOUNDS</Text>
+        {isAllFilter && <FeaturedBanner />}
+
+        {isAllFilter && (
+          <>
+            <Text style={styles.sectionLabel}>FAVORITES</Text>
+            {favoriteSounds.length === 0 ? (
+              <Text style={styles.favEmptyText}>Hold any sound to favorite it ♡</Text>
+            ) : (
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.favRow}
+              >
+                {favoriteSounds.map(sound => (
+                  <TouchableOpacity
+                    key={sound.id}
+                    style={[styles.favCard, (allActive[sound.id] ?? false) && styles.favCardActive]}
+                    onPress={() => handleToggle(sound.id)}
+                    onLongPress={() => setExpandedId(sound.id)}
+                    delayLongPress={400}
+                    activeOpacity={0.8}
+                  >
+                    <Ionicons
+                      name={sound.icon}
+                      size={22}
+                      color={(allActive[sound.id] ?? false) ? colors.accentBlue : colors.textSecondary}
+                    />
+                    <Text style={[styles.favCardName, (allActive[sound.id] ?? false) && styles.favCardNameActive]}>
+                      {sound.name}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            )}
+          </>
+        )}
+
+        <Text style={styles.sectionLabel}>{sectionLabel}</Text>
       </>
     ),
-    [],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [isAllFilter, favoriteSounds, allActive, sectionLabel, handleToggle],
   );
+
+  const ListFooter = useMemo(() => {
+    if (!isAllFilter) return null;
+    return (
+      <View style={styles.discoverSection}>
+        <Text style={styles.sectionLabel}>DISCOVER</Text>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.discoverRow}
+        >
+          {DISCOVER_CARDS.map(card => (
+            <TouchableOpacity
+              key={card.path}
+              style={styles.discoverCard}
+              onPress={() => router.push(card.path as '/')}
+              activeOpacity={0.8}
+            >
+              <View style={styles.discoverIconWrap}>
+                <Ionicons name={card.icon} size={22} color={colors.accentBlue} />
+              </View>
+              <View style={styles.discoverText}>
+                <Text style={styles.discoverTitle}>{card.title}</Text>
+                <Text style={styles.discoverSubtitle}>{card.subtitle}</Text>
+              </View>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+      </View>
+    );
+  }, [isAllFilter]);
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
@@ -176,7 +303,7 @@ export default function HomeScreen() {
         style={styles.pillsScroll}
       >
         {FILTER_LABELS.map(label => {
-          const isActive = activeFilter === label && label !== 'Space';
+          const isActive = activeFilter === label;
           return (
             <TouchableOpacity
               key={label}
@@ -199,6 +326,7 @@ export default function HomeScreen() {
         showsVerticalScrollIndicator={false}
         style={styles.list}
         ListHeaderComponent={ListHeader}
+        ListFooterComponent={ListFooter}
       />
 
       {/* Phase 2: Sleep Timer reserved area */}
@@ -207,14 +335,14 @@ export default function HomeScreen() {
       <BottomNav />
 
       <SoundModal
-        sounds={allSounds}
+        sounds={modalSounds}
         expandedId={expandedId}
-        active={allActive}
-        volumes={allVolumes}
-        onToggle={handleToggle}
-        onVolumeChange={handleSetVolume}
+        active={isSpaceFilter ? solarActive : allActive}
+        volumes={isSpaceFilter ? solarVolumes : allVolumes}
+        onToggle={isSpaceFilter ? solarToggle : handleToggle}
+        onVolumeChange={isSpaceFilter ? solarSetVolume : handleSetVolume}
         onClose={() => setExpandedId(null)}
-        onDelete={deleteRecording}
+        onDelete={isSpaceFilter ? undefined : deleteRecording}
       />
 
       <RecordingModal
@@ -308,12 +436,50 @@ const styles = StyleSheet.create({
     paddingTop: 4,
     paddingBottom: 8,
   },
+  favEmptyText: {
+    color: colors.textSecondary,
+    fontSize: 12,
+    opacity: 0.4,
+    paddingHorizontal: 14,
+    paddingBottom: 14,
+    fontStyle: 'italic',
+  },
+  favRow: {
+    paddingHorizontal: 10,
+    gap: 8,
+    paddingBottom: 12,
+  },
+  favCard: {
+    width: 80,
+    height: 76,
+    borderRadius: 14,
+    backgroundColor: colors.surface,
+    borderWidth: 1.5,
+    borderColor: colors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+  },
+  favCardActive: {
+    borderColor: colors.accentBlue,
+    backgroundColor: colors.surfaceActive,
+  },
+  favCardName: {
+    color: colors.textSecondary,
+    fontSize: 10,
+    fontWeight: '400',
+    textAlign: 'center',
+  },
+  favCardNameActive: {
+    color: colors.textPrimary,
+  },
   list: {
     flex: 1,
   },
   grid: {
     paddingHorizontal: 10,
     paddingTop: 4,
+    paddingBottom: 8,
   },
   emptyCell: {
     flex: 1,
@@ -330,6 +496,49 @@ const styles = StyleSheet.create({
     borderStyle: 'dashed',
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  discoverSection: {
+    paddingTop: 8,
+    paddingBottom: 16,
+  },
+  discoverRow: {
+    paddingHorizontal: 10,
+    gap: 10,
+  },
+  discoverCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.accentBlue,
+    borderRadius: 14,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    gap: 12,
+    width: 200,
+  },
+  discoverIconWrap: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: colors.accentPurple,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  discoverText: {
+    flex: 1,
+  },
+  discoverTitle: {
+    color: colors.textPrimary,
+    fontSize: 13,
+    fontWeight: '600',
+    marginBottom: 2,
+  },
+  discoverSubtitle: {
+    color: colors.textSecondary,
+    fontSize: 11,
+    fontWeight: '400',
+    opacity: 0.7,
   },
   timerArea: {
     height: 4,

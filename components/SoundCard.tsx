@@ -5,6 +5,8 @@ import Slider from '@react-native-community/slider';
 import { colors } from '../constants/colors';
 import type { SoundDef } from '../constants/sounds';
 
+const FAVORITE_COLOR = '#E8688A';
+
 interface Props {
   sound: SoundDef;
   isActive: boolean;
@@ -12,6 +14,8 @@ interface Props {
   onToggle: () => void;
   onVolumeChange: (v: number) => void;
   onLongPress: () => void;
+  isFavorite?: boolean;
+  onFavoriteToggle?: () => void;
 }
 
 const SoundCard = memo(function SoundCard({
@@ -21,6 +25,8 @@ const SoundCard = memo(function SoundCard({
   onToggle,
   onVolumeChange,
   onLongPress,
+  isFavorite,
+  onFavoriteToggle,
 }: Props) {
   return (
     <TouchableOpacity
@@ -30,6 +36,17 @@ const SoundCard = memo(function SoundCard({
       delayLongPress={400}
       activeOpacity={0.85}
     >
+      {onFavoriteToggle !== undefined && (
+        <View style={styles.heartWrapper} onStartShouldSetResponder={() => true}>
+          <TouchableOpacity onPress={onFavoriteToggle} activeOpacity={0.7} hitSlop={8}>
+            <Ionicons
+              name={isFavorite ? 'heart' : 'heart-outline'}
+              size={13}
+              color={isFavorite ? FAVORITE_COLOR : colors.textSecondary}
+            />
+          </TouchableOpacity>
+        </View>
+      )}
       <Ionicons
         name={sound.icon}
         size={26}
@@ -81,6 +98,11 @@ const styles = StyleSheet.create({
     borderColor: colors.accentBlue,
     backgroundColor: colors.surfaceActive,
     shadowOpacity: 0.4,
+  },
+  heartWrapper: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
   },
   name: {
     color: colors.textSecondary,

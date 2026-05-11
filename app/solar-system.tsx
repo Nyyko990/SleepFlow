@@ -9,43 +9,22 @@ import SoundCard from '../components/SoundCard';
 import { SoundModal } from '../components/SoundModal';
 import { useSoundPlayer } from '../hooks/useSoundPlayer';
 
-const ADD_ITEM_ID = '__pad';
-const TOTAL = SOLAR_SOUNDS.length;
-const REMAINDER = TOTAL % 3;
-const PAD_COUNT = REMAINDER === 0 ? 0 : 3 - REMAINDER;
-
-type GridItem = SolarSoundDef | { id: string; isEmpty: true };
-
-const GRID_DATA: GridItem[] = [
-  ...SOLAR_SOUNDS,
-  ...Array.from({ length: PAD_COUNT }, (_, i) => ({
-    id: `${ADD_ITEM_ID}_${i}`,
-    isEmpty: true as const,
-  })),
-];
-
 export default function SolarSystemScreen() {
   const insets = useSafeAreaInsets();
   const { active, volumes, toggle, setVolume } = useSoundPlayer(SOLAR_SOUNDS);
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
   const renderItem = useCallback(
-    ({ item }: { item: GridItem }) => {
-      if ('isEmpty' in item && item.isEmpty) {
-        return <View style={styles.emptyCell} />;
-      }
-      const sound = item as SolarSoundDef;
-      return (
-        <SoundCard
-          sound={sound}
-          isActive={active[sound.id] ?? false}
-          volume={volumes[sound.id] ?? 0.7}
-          onToggle={() => toggle(sound.id)}
-          onVolumeChange={v => setVolume(sound.id, v)}
-          onLongPress={() => setExpandedId(sound.id)}
-        />
-      );
-    },
+    ({ item }: { item: SolarSoundDef }) => (
+      <SoundCard
+        sound={item}
+        isActive={active[item.id] ?? false}
+        volume={volumes[item.id] ?? 0.7}
+        onToggle={() => toggle(item.id)}
+        onVolumeChange={v => setVolume(item.id, v)}
+        onLongPress={() => setExpandedId(item.id)}
+      />
+    ),
     [active, volumes, toggle, setVolume],
   );
 
@@ -63,11 +42,12 @@ export default function SolarSystemScreen() {
       </View>
 
       <FlatList
-        data={GRID_DATA}
+        data={SOLAR_SOUNDS}
         keyExtractor={item => item.id}
         numColumns={3}
         renderItem={renderItem}
         contentContainerStyle={styles.grid}
+        columnWrapperStyle={styles.columnWrapper}
         showsVerticalScrollIndicator={false}
       />
 
@@ -120,8 +100,7 @@ const styles = StyleSheet.create({
     paddingTop: 4,
     paddingBottom: 32,
   },
-  emptyCell: {
-    flex: 1,
-    margin: 5,
+  columnWrapper: {
+    justifyContent: 'center',
   },
 });

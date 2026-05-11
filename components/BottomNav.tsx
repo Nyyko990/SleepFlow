@@ -6,11 +6,12 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors } from '../constants/colors';
 import type { IoniconName } from '../constants/sounds';
 
-const TABS: { path: string; icon: IoniconName }[] = [
-  { path: '/', icon: 'volume-medium-outline' },
-  { path: '/breathe', icon: 'leaf-outline' },
-  { path: '/stories', icon: 'book-outline' },
-  { path: '/timer', icon: 'timer-outline' },
+const TABS: { path: string; icon: IoniconName; activeIcon: IoniconName }[] = [
+  { path: '/', icon: 'home-outline', activeIcon: 'home' },
+  { path: '/sounds', icon: 'volume-medium-outline', activeIcon: 'volume-medium' },
+  { path: '/breathe', icon: 'leaf-outline', activeIcon: 'leaf' },
+  { path: '/stories', icon: 'book-outline', activeIcon: 'book' },
+  { path: '/timer', icon: 'timer-outline', activeIcon: 'timer' },
 ];
 
 export function BottomNav() {
@@ -32,7 +33,7 @@ export function BottomNav() {
             hitSlop={8}
           >
             <Ionicons
-              name={tab.icon}
+              name={isActive ? tab.activeIcon : tab.icon}
               size={24}
               color={isActive ? colors.tabActive : colors.textSecondary}
             />
