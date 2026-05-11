@@ -15,7 +15,11 @@
       "Bash(kill %1)",
       "Bash(node *)",
       "Bash(npm start *)",
-      "Bash(npx tsc *)"
+      "Bash(npx tsc *)",
+      "WebFetch(domain:docs.expo.dev)",
+      "WebSearch",
+      "Bash(npm uninstall *)",
+      "Bash(python3 *)"
     ]
   }
 }

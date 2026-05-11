@@ -1,3 +1,4 @@
+// Audio files in assets/sounds/ are gitignored and must never be committed to the repository.
 import type { SoundDef } from './sounds';
 
 export interface SolarSoundDef extends SoundDef {

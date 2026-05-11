@@ -37,7 +37,7 @@ Uses **Expo Router** (file-based routing inside `app/`). `app/_layout.tsx` is th
 
 | Package | Purpose |
 |---|---|
-| `expo-av` | Audio playback and microphone recording |
+| `expo-audio` | Audio playback and microphone recording — replaced `expo-av` at SDK 54. Use `createAudioPlayer` for imperative looping ambient playback; `volume` is a synchronous property setter (`player.volume = 0.5`), not an async method. Use `useAudioRecorder` hook for mic capture. |
 | `expo-document-picker` | Audio file import from device |
 | `expo-file-system` | File storage for user recordings — **import from `expo-file-system/legacy`**, not the main export; the v19 default export is a new class-based API that does not expose `documentDirectory`, `copyAsync`, etc. |
 | `@react-native-async-storage/async-storage` | Persists per-sound volumes (`sf_vol_<id>`) and user recording metadata (`user_recordings`) |
@@ -64,6 +64,9 @@ All colors live in `constants/colors.ts`. Never hardcode hex values in component
 | `colors.textPrimary` | `#E8E8F0` | Main text |
 | `colors.textSecondary` | `#8888A0` | Muted/secondary text |
 | `colors.border` | `#1A1A2E` | Dividers and borders |
+| `colors.cardGlow` | `#2D5986` | Active card glow tint |
+| `colors.pillActive` | `#1E3A5F` | Active filter pill background |
+| `colors.tabActive` | `#4A7CB5` | Active bottom nav tab icon |
 
 ### Sound system
 
@@ -90,6 +93,7 @@ interface SoundDef {
   isUserRecording?: boolean;
   subtitle?: string;        // shown below name in card and modal (e.g. planet name)
   description?: string;     // shown in modal info panel (e.g. mythology text)
+  category?: string;        // e.g. 'nature' — used for future filter logic
 }
 ```
 
@@ -97,7 +101,9 @@ interface SoundDef {
 
 ### Grid layout
 
-The home screen `FlatList` (3 columns) is built from `buildGridData(allSounds)` which appends a `{ id: '__add' }` add-button item and then pads to a multiple of 3 with `isEmpty` spacers. `renderItem` switches on `item.id === '__add'` and `'isEmpty' in item` before rendering a `SoundCard`. The `FlatList` uses `ListHeaderComponent={<FeaturedBanner />}` to place the Solar System banner above the grid.
+The home screen `FlatList` (3 columns) is built from `buildGridData(allSounds)` which appends a `{ id: '__add' }` add-button item and then pads to a multiple of 3 with `isEmpty` spacers. `renderItem` switches on `item.id === '__add'` and `'isEmpty' in item` before rendering a `SoundCard`. The `FlatList` uses `ListHeaderComponent` to place `<FeaturedBanner />` and a section label above the grid.
+
+Filter pills (`All`, `Nature`, `Space`, `Personal`) sit in a horizontal `ScrollView` above the grid. `Space` is not a filter — it navigates to `/solar-system` via `router.push`. The others set `activeFilter` state which filters `allSounds` before passing to `buildGridData`.
 
 ### Components
 
@@ -106,6 +112,11 @@ The home screen `FlatList` (3 columns) is built from `buildGridData(allSounds)` 
 - **`RecordingModal`** — `Modal`-based (not an absolute-fill overlay). Three internal modes: `choose` (Record / Import File), `record` (live 00:00 timer, red stop button), `preview` (play/pause + name `TextInput` + Save/Discard). Uses `Audio.Recording` for mic capture, `expo-document-picker` for file import. On save, delegates file copy to `useRecordingPlayer.addRecording`. On iOS, `Audio.Recording.getURI()` returns a temporary URI that's invalidated after the recording is unloaded — the save flow copies it to a persistent path immediately; don't delay this copy.
 - **`FeaturedBanner`** — tappable card above the grid; calls `router.push('/solar-system')`. Purple-accented (`accentPurple` border + left stripe).
 - **`LoadingScreen`** — absolute-fill splash shown while `useSoundPlayer.isReady === false`. Fades out over 600 ms. Internally runs several looping `Animated` animations in parallel: star twinkling (staggered per-star timers), constellation line opacity, cloud parallax drift, and a moon breathing pulse — all via `Animated.loop(Animated.sequence([...]))`.
+- **`BottomNav`** — persistent tab bar rendered at the bottom of every main screen. Four tabs: `/` (sounds), `/breathe`, `/stories`, `/timer`. Uses `usePathname` to highlight the active tab with `colors.tabActive` and a small dot indicator. Navigates via `router.replace` (not `push`) to avoid stacking screens.
+
+### Stub screens
+
+`app/breathe.tsx`, `app/stories.tsx`, and `app/timer.tsx` are placeholder screens ("Coming soon") wired into `BottomNav`. Each follows the same pattern: `useSafeAreaInsets` for top padding, centered text, and `<BottomNav />` at the bottom. Implement content inside the `content` View.
 
 ### Solar System screen (`app/solar-system.tsx`)
 
@@ -124,4 +135,5 @@ Standalone screen with its own `useSoundPlayer(SOLAR_SOUNDS)` instance. All 8 so
 - Use `StyleSheet.create` for all styles — no inline style objects.
 - Screen components are default exports; helper/UI components are named exports.
 - Orientation is locked to portrait (`app.json`).
-- The home screen `timerArea` View at the bottom is reserved for the Phase 2 sleep timer — leave it in place.
+- The home screen `timerArea` View (`height: 4`) sits between the grid and `BottomNav` — leave it in place as a Phase 2 hook point.
+- New main screens must include `<BottomNav />` and respect `useSafeAreaInsets` for top padding (no global layout wrapper exists).

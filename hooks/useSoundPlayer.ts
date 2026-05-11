@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Audio } from 'expo-av';
+import { createAudioPlayer, setAudioModeAsync } from 'expo-audio';
+import type { AudioPlayer } from 'expo-audio';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { SoundDef } from '../constants/sounds';
 
@@ -14,7 +15,7 @@ export function useSoundPlayer(sounds: SoundDef[]) {
   const playableRef = useRef<SoundDef[]>(sounds.filter(s => !s.isEmpty));
   const PLAYABLE = playableRef.current;
 
-  const soundRefs = useRef<Record<string, Audio.Sound | null>>({});
+  const soundRefs = useRef<Record<string, AudioPlayer | null>>({});
   const timerRefs = useRef<Record<string, ReturnType<typeof setInterval> | null>>({});
 
   const [active, setActive] = useState<Record<string, boolean>>(
@@ -36,12 +37,12 @@ export function useSoundPlayer(sounds: SoundDef[]) {
     let alive = true;
 
     (async () => {
-      await Audio.setAudioModeAsync({
-        staysActiveInBackground: true,
-        playsInSilentModeIOS: true,
-        allowsRecordingIOS: false,
-        shouldDuckAndroid: false,
-        playThroughEarpieceAndroid: false,
+      await setAudioModeAsync({
+        playsInSilentMode: true,
+        shouldPlayInBackground: true,
+        interruptionMode: 'mixWithOthers',
+        allowsRecording: false,
+        shouldRouteThroughEarpiece: false,
       });
 
       const volEntries = await Promise.all(
@@ -52,35 +53,31 @@ export function useSoundPlayer(sounds: SoundDef[]) {
       );
       if (alive) setVolumes(Object.fromEntries(volEntries));
 
-      await Promise.all(
-        PLAYABLE.map(async s => {
-          if (!s.file) {
-            if (alive) setLoadedCount(c => c + 1);
-            return;
-          }
-          try {
-            const { sound } = await Audio.Sound.createAsync(s.file, {
-              isLooping: true,
-              volume: 0,
-              shouldPlay: false,
-            });
-            if (alive) {
-              soundRefs.current[s.id] = sound;
-            } else {
-              sound.unloadAsync();
-            }
-          } catch (err) {
-            console.warn(`[SleepFlow] Failed to load "${s.id}":`, err);
-          }
+      for (const s of PLAYABLE) {
+        if (!s.file) {
           if (alive) setLoadedCount(c => c + 1);
-        })
-      );
+          continue;
+        }
+        try {
+          const player = createAudioPlayer(s.file);
+          player.loop = true;
+          player.volume = 0;
+          if (alive) {
+            soundRefs.current[s.id] = player;
+          } else {
+            player.remove();
+          }
+        } catch (err) {
+          console.warn(`[SleepFlow] Failed to load "${s.id}":`, err);
+        }
+        if (alive) setLoadedCount(c => c + 1);
+      }
     })();
 
     return () => {
       alive = false;
       Object.values(timerRefs.current).forEach(t => t && clearInterval(t));
-      Object.values(soundRefs.current).forEach(s => s?.unloadAsync());
+      Object.values(soundRefs.current).forEach(p => p?.remove());
     };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -102,29 +99,27 @@ export function useSoundPlayer(sounds: SoundDef[]) {
     if (!sound) return;
 
     if (!wasActive) {
-      sound.setVolumeAsync(0);
-      sound.playAsync();
+      sound.volume = 0;
+      sound.play();
       let step = 0;
-      timerRefs.current[id] = setInterval(async () => {
+      timerRefs.current[id] = setInterval(() => {
         step++;
-        await sound.setVolumeAsync(Math.min((step / FADE_STEPS) * targetVol, targetVol));
+        sound.volume = Math.min((step / FADE_STEPS) * targetVol, targetVol);
         if (step >= FADE_STEPS) clearTimer(id);
       }, FADE_IN_MS / FADE_STEPS);
     } else {
-      sound.getStatusAsync().then(status => {
-        if (!status.isLoaded) return;
-        const fromVol = status.volume;
-        let step = 0;
-        timerRefs.current[id] = setInterval(async () => {
-          step++;
-          const vol = Math.max(fromVol * (1 - step / FADE_STEPS), 0);
-          await sound.setVolumeAsync(vol);
-          if (step >= FADE_STEPS) {
-            clearTimer(id);
-            sound.stopAsync();
-          }
-        }, FADE_OUT_MS / FADE_STEPS);
-      });
+      const fromVol = sound.volume;
+      let step = 0;
+      timerRefs.current[id] = setInterval(() => {
+        step++;
+        const vol = Math.max(fromVol * (1 - step / FADE_STEPS), 0);
+        sound.volume = vol;
+        if (step >= FADE_STEPS) {
+          clearTimer(id);
+          sound.pause();
+          sound.seekTo(0);
+        }
+      }, FADE_OUT_MS / FADE_STEPS);
     }
   }, [clearTimer]);
 
@@ -132,8 +127,9 @@ export function useSoundPlayer(sounds: SoundDef[]) {
     clearTimer(id);
     setVolumes(prev => ({ ...prev, [id]: vol }));
     AsyncStorage.setItem(VOL_KEY + id, String(vol));
-    if (activeRef.current[id]) {
-      soundRefs.current[id]?.setVolumeAsync(vol);
+    const sound = soundRefs.current[id];
+    if (sound && activeRef.current[id]) {
+      sound.volume = vol;
     }
   }, [clearTimer]);
 

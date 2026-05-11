@@ -10,11 +10,21 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import { Audio } from 'expo-av';
+import {
+  useAudioPlayer,
+  useAudioPlayerStatus,
+  useAudioRecorder,
+  setAudioModeAsync,
+  requestRecordingPermissionsAsync,
+  RecordingPresets,
+} from 'expo-audio';
 import * as DocumentPicker from 'expo-document-picker';
 import * as FileSystem from 'expo-file-system/legacy';
 import { Ionicons } from '@expo/vector-icons';
 import { colors } from '../constants/colors';
+
+const MAX_NAME_LENGTH = 50;
+const ALLOWED_AUDIO_EXTENSIONS = ['mp3', 'm4a', 'aac', 'wav', 'ogg', 'flac', 'opus', 'aiff', 'wma'];
 
 type Mode = 'choose' | 'record' | 'preview';
 
@@ -38,12 +48,20 @@ export function RecordingModal({ visible, existingCount, onSave, onClose }: Prop
   const [isPreviewPlaying, setIsPreviewPlaying] = useState(false);
   const [name, setName] = useState('');
 
-  const recordingRef = useRef<Audio.Recording | null>(null);
-  const previewSoundRef = useRef<Audio.Sound | null>(null);
-  const durationTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const recorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
+  const previewPlayer = useAudioPlayer(null);
+  const previewStatus = useAudioPlayerStatus(previewPlayer);
 
+  const durationTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const backdropAnim = useRef(new Animated.Value(0)).current;
   const scaleAnim = useRef(new Animated.Value(0.9)).current;
+
+  // Detect preview playback finishing naturally
+  useEffect(() => {
+    if (previewStatus.didJustFinish) {
+      setIsPreviewPlaying(false);
+    }
+  }, [previewStatus.didJustFinish]);
 
   useEffect(() => {
     if (visible) {
@@ -68,22 +86,15 @@ export function RecordingModal({ visible, existingCount, onSave, onClose }: Prop
     }
   };
 
-  const stopPreviewSound = async () => {
-    const sound = previewSoundRef.current;
-    if (sound) {
-      previewSoundRef.current = null;
-      await sound.stopAsync().catch(() => {});
-      await sound.unloadAsync().catch(() => {});
-    }
+  const stopPreviewSound = () => {
+    previewPlayer.pause();
     setIsPreviewPlaying(false);
   };
 
   const stopRecordingObj = async () => {
-    const rec = recordingRef.current;
-    if (rec) {
-      recordingRef.current = null;
+    if (recorder.isRecording) {
       try {
-        await rec.stopAndUnloadAsync();
+        await recorder.stop();
       } catch {}
     }
   };
@@ -91,12 +102,11 @@ export function RecordingModal({ visible, existingCount, onSave, onClose }: Prop
   const handleClose = async () => {
     stopDurationTimer();
     await stopRecordingObj();
-    await stopPreviewSound();
-    // Clean up temp recording file on close without saving
+    stopPreviewSound();
     if (previewUri && mode === 'preview') {
       FileSystem.deleteAsync(previewUri, { idempotent: true }).catch(() => {});
     }
-    await Audio.setAudioModeAsync({ allowsRecordingIOS: false, playsInSilentModeIOS: true });
+    await setAudioModeAsync({ allowsRecording: false, playsInSilentMode: true });
     setMode('choose');
     setDuration(0);
     setPreviewUri(null);
@@ -105,7 +115,7 @@ export function RecordingModal({ visible, existingCount, onSave, onClose }: Prop
 
   const startRecording = async () => {
     try {
-      const { granted } = await Audio.requestPermissionsAsync();
+      const { granted } = await requestRecordingPermissionsAsync();
       if (!granted) {
         Alert.alert(
           'Microphone Access',
@@ -114,16 +124,14 @@ export function RecordingModal({ visible, existingCount, onSave, onClose }: Prop
         return;
       }
 
-      await Audio.setAudioModeAsync({
-        allowsRecordingIOS: true,
-        playsInSilentModeIOS: true,
-        staysActiveInBackground: true,
+      await setAudioModeAsync({
+        allowsRecording: true,
+        playsInSilentMode: true,
+        shouldPlayInBackground: true,
       });
 
-      const recording = new Audio.Recording();
-      await recording.prepareToRecordAsync(Audio.RecordingOptionsPresets.HIGH_QUALITY);
-      await recording.startAsync();
-      recordingRef.current = recording;
+      await recorder.prepareToRecordAsync();
+      recorder.record();
       setDuration(0);
       setMode('record');
 
@@ -138,14 +146,13 @@ export function RecordingModal({ visible, existingCount, onSave, onClose }: Prop
 
   const stopRecording = async () => {
     stopDurationTimer();
-    const rec = recordingRef.current;
-    if (!rec) return;
-    recordingRef.current = null;
+    if (!recorder.isRecording) return;
     try {
-      await rec.stopAndUnloadAsync();
-      const uri = rec.getURI();
-      await Audio.setAudioModeAsync({ allowsRecordingIOS: false, playsInSilentModeIOS: true });
+      await recorder.stop();
+      const uri = recorder.uri;
+      await setAudioModeAsync({ allowsRecording: false, playsInSilentMode: true });
       if (uri) {
+        previewPlayer.replace({ uri });
         setPreviewUri(uri);
         setMode('preview');
       }
@@ -154,29 +161,19 @@ export function RecordingModal({ visible, existingCount, onSave, onClose }: Prop
     }
   };
 
-  const togglePreview = async () => {
+  const togglePreview = () => {
     if (!previewUri) return;
-
     if (isPreviewPlaying) {
-      await previewSoundRef.current?.pauseAsync();
+      previewPlayer.pause();
       setIsPreviewPlaying(false);
-    } else if (previewSoundRef.current) {
-      await previewSoundRef.current.playAsync();
-      setIsPreviewPlaying(true);
     } else {
-      const { sound } = await Audio.Sound.createAsync({ uri: previewUri }, { shouldPlay: true });
-      sound.setOnPlaybackStatusUpdate(status => {
-        if (status.isLoaded && status.didJustFinish) {
-          setIsPreviewPlaying(false);
-        }
-      });
-      previewSoundRef.current = sound;
+      previewPlayer.play();
       setIsPreviewPlaying(true);
     }
   };
 
-  const handleDiscard = async () => {
-    await stopPreviewSound();
+  const handleDiscard = () => {
+    stopPreviewSound();
     if (previewUri) {
       FileSystem.deleteAsync(previewUri, { idempotent: true }).catch(() => {});
     }
@@ -186,13 +183,13 @@ export function RecordingModal({ visible, existingCount, onSave, onClose }: Prop
   };
 
   const handleSave = async () => {
-    if (!previewUri || !name.trim()) return;
-    await stopPreviewSound();
-    const savedName = name.trim();
+    const trimmed = name.trim().slice(0, MAX_NAME_LENGTH);
+    if (!previewUri || !trimmed) return;
+    stopPreviewSound();
     const savedUri = previewUri;
     setPreviewUri(null);
     setMode('choose');
-    onSave(savedName, savedUri);
+    onSave(trimmed, savedUri);
     onClose();
   };
 
@@ -204,10 +201,18 @@ export function RecordingModal({ visible, existingCount, onSave, onClose }: Prop
       });
       if (!result.canceled && result.assets.length > 0) {
         const asset = result.assets[0];
+
+        // Validate file extension
+        const ext = asset.name?.split('.').pop()?.toLowerCase() ?? '';
+        if (!ALLOWED_AUDIO_EXTENSIONS.includes(ext)) {
+          Alert.alert('Invalid File', 'Please select an audio file (MP3, M4A, WAV, AAC, etc.).');
+          return;
+        }
+
+        previewPlayer.replace({ uri: asset.uri });
         setPreviewUri(asset.uri);
-        // Prefill name from filename (strip extension)
         const rawName = asset.name ?? `My Sound ${existingCount + 1}`;
-        setName(rawName.replace(/\.[^.]+$/, ''));
+        setName(rawName.replace(/\.[^.]+$/, '').slice(0, MAX_NAME_LENGTH));
         setMode('preview');
       }
     } catch (err) {
@@ -273,10 +278,10 @@ export function RecordingModal({ visible, existingCount, onSave, onClose }: Prop
               <TextInput
                 style={styles.nameInput}
                 value={name}
-                onChangeText={setName}
+                onChangeText={t => setName(t.slice(0, MAX_NAME_LENGTH))}
                 placeholder="Sound name..."
                 placeholderTextColor={colors.textSecondary}
-                maxLength={30}
+                maxLength={MAX_NAME_LENGTH}
                 selectTextOnFocus
               />
               <View style={styles.actionRow}>

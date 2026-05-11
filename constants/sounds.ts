@@ -1,3 +1,4 @@
+// Audio files in assets/sounds/ are gitignored and must never be committed to the repository.
 import type { ComponentProps } from 'react';
 import { Ionicons } from '@expo/vector-icons';
 

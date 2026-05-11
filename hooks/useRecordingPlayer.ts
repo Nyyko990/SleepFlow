@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Audio } from 'expo-av';
+import { createAudioPlayer } from 'expo-audio';
+import type { AudioPlayer } from 'expo-audio';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as FileSystem from 'expo-file-system/legacy';
 import type { SoundDef } from '../constants/sounds';
@@ -22,7 +23,7 @@ export function useRecordingPlayer() {
   const [recordings, setRecordings] = useState<RecordingMeta[]>([]);
   const recordingsRef = useRef<RecordingMeta[]>([]);
 
-  const soundRefs = useRef<Record<string, Audio.Sound | null>>({});
+  const soundRefs = useRef<Record<string, AudioPlayer | null>>({});
   const timerRefs = useRef<Record<string, ReturnType<typeof setInterval> | null>>({});
 
   const [active, setActive] = useState<Record<string, boolean>>({});
@@ -35,11 +36,10 @@ export function useRecordingPlayer() {
 
   const loadSoundForId = async (id: string, filePath: string) => {
     try {
-      const { sound } = await Audio.Sound.createAsync(
-        { uri: filePath },
-        { isLooping: true, volume: 0, shouldPlay: false },
-      );
-      soundRefs.current[id] = sound;
+      const player = createAudioPlayer({ uri: filePath });
+      player.loop = true;
+      player.volume = 0;
+      soundRefs.current[id] = player;
     } catch (err) {
       console.warn(`[SleepFlow] Failed to load recording "${id}":`, err);
     }
@@ -77,7 +77,7 @@ export function useRecordingPlayer() {
     return () => {
       alive = false;
       Object.values(timerRefs.current).forEach(t => t && clearInterval(t));
-      Object.values(soundRefs.current).forEach(s => s?.unloadAsync());
+      Object.values(soundRefs.current).forEach(p => p?.remove());
     };
   }, []);
 
@@ -100,29 +100,27 @@ export function useRecordingPlayer() {
       if (!sound) return;
 
       if (!wasActive) {
-        sound.setVolumeAsync(0);
-        sound.playAsync();
+        sound.volume = 0;
+        sound.play();
         let step = 0;
-        timerRefs.current[id] = setInterval(async () => {
+        timerRefs.current[id] = setInterval(() => {
           step++;
-          await sound.setVolumeAsync(Math.min((step / FADE_STEPS) * targetVol, targetVol));
+          sound.volume = Math.min((step / FADE_STEPS) * targetVol, targetVol);
           if (step >= FADE_STEPS) clearTimer(id);
         }, FADE_IN_MS / FADE_STEPS);
       } else {
-        sound.getStatusAsync().then(status => {
-          if (!status.isLoaded) return;
-          const fromVol = status.volume;
-          let step = 0;
-          timerRefs.current[id] = setInterval(async () => {
-            step++;
-            const vol = Math.max(fromVol * (1 - step / FADE_STEPS), 0);
-            await sound.setVolumeAsync(vol);
-            if (step >= FADE_STEPS) {
-              clearTimer(id);
-              sound.stopAsync();
-            }
-          }, FADE_OUT_MS / FADE_STEPS);
-        });
+        const fromVol = sound.volume;
+        let step = 0;
+        timerRefs.current[id] = setInterval(() => {
+          step++;
+          const vol = Math.max(fromVol * (1 - step / FADE_STEPS), 0);
+          sound.volume = vol;
+          if (step >= FADE_STEPS) {
+            clearTimer(id);
+            sound.pause();
+            sound.seekTo(0);
+          }
+        }, FADE_OUT_MS / FADE_STEPS);
       }
     },
     [clearTimer],
@@ -133,8 +131,9 @@ export function useRecordingPlayer() {
       clearTimer(id);
       setVolumes(prev => ({ ...prev, [id]: vol }));
       AsyncStorage.setItem(VOL_KEY + id, String(vol));
-      if (activeRef.current[id]) {
-        soundRefs.current[id]?.setVolumeAsync(vol);
+      const sound = soundRefs.current[id];
+      if (sound && activeRef.current[id]) {
+        sound.volume = vol;
       }
     },
     [clearTimer],
@@ -174,8 +173,8 @@ export function useRecordingPlayer() {
 
       const sound = soundRefs.current[id];
       if (sound) {
-        await sound.stopAsync().catch(() => {});
-        await sound.unloadAsync().catch(() => {});
+        sound.pause();
+        sound.remove();
         delete soundRefs.current[id];
       }
 
