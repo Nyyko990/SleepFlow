@@ -30,13 +30,13 @@ Tracks every feature shipped in SleepFlow, phase by phase.
 | 1.3.5 | SoundDef category field | ✅ Done | `category?: string` — used for future filter refinement |
 | 1.x | Migrate expo-av → expo-audio | ✅ Done | `createAudioPlayer`, `useAudioRecorder` — synchronous volume API |
 | 1.x | Input validation (security) | ✅ Done | Max 50 chars for names, audio extension whitelist on import |
+| 1.4 | Breathing exercises screen | ✅ Done | Implement inside `app/breathe.tsx` stub |
+| 1.4 | Breathing animation | ✅ Done | Inhale / hold / exhale cycle with visual guide |
 
 ## Upcoming
 
 | Phase | Feature | Status | Notes |
 |---|---|---|---|
-| 1.4 | Breathing exercises screen | 🔜 Planned | Implement inside `app/breathe.tsx` stub |
-| 1.4 | Breathing animation | 🔜 Planned | Inhale / hold / exhale cycle with visual guide |
 | 1.5 | Sleep stories screen | 🔜 Planned | Implement inside `app/stories.tsx` stub |
 | 1.5 | Story audio player | 🔜 Planned | Single-track player with progress bar |
 | 2.0 | Sleep timer | 🔜 Planned | `timerArea` View in `app/index.tsx` is the reserved hook point |

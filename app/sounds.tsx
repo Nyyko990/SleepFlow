@@ -19,20 +19,63 @@ import { BottomNav } from '../components/BottomNav';
 import { useAudio } from '../context/AudioContext';
 
 const ADD_BUTTON_ID = '__add';
-const FILTER_LABELS = ['All', 'Nature', 'Space', 'Personal'] as const;
-type FilterLabel = (typeof FILTER_LABELS)[number];
 
+type FilterLabel = 'All' | 'Nature' | 'Personal';
 type GridItem = SoundDef | { id: string; isEmpty: true } | { id: '__add' };
 
-function buildGridData(soundDefs: SoundDef[]): GridItem[] {
-  const withAdd: GridItem[] = [...soundDefs, { id: ADD_BUTTON_ID }];
-  const remainder = withAdd.length % 3;
+const PLANETS = [
+  { size: 26, color: '#D4A843', top: 6, right: 6 },
+  { size: 15, color: '#4A7CB5', top: 26, right: 38 },
+  { size: 19, color: '#6B4FA0', top: 2, right: 28 },
+  { size: 11, color: '#3A9E8F', top: 34, right: 10 },
+] as const;
+
+function buildGrid(soundDefs: SoundDef[], withAdd: boolean, padPrefix = ''): GridItem[] {
+  const base: GridItem[] = withAdd ? [...soundDefs, { id: ADD_BUTTON_ID }] : [...soundDefs];
+  const remainder = base.length % 3;
   const padCount = remainder === 0 ? 0 : 3 - remainder;
   const pads: GridItem[] = Array.from({ length: padCount }, (_, i) => ({
-    id: `__pad_${i}`,
+    id: `__pad_${padPrefix}_${i}`,
     isEmpty: true as const,
   }));
-  return [...withAdd, ...pads];
+  return [...base, ...pads];
+}
+
+function SolarCard() {
+  return (
+    <TouchableOpacity
+      style={styles.solarCard}
+      activeOpacity={0.82}
+      onPress={() => router.push('/solar-system')}
+    >
+      <View style={styles.solarTextBlock}>
+        <Text style={styles.solarLabel}>FEATURED BUNDLE</Text>
+        <Text style={styles.solarTitle}>Solar System</Text>
+        <Text style={styles.solarSubtitle}>Ancient gods of the night sky</Text>
+        <View style={styles.solarBadge}>
+          <Text style={styles.solarBadgeText}>8 sounds</Text>
+        </View>
+      </View>
+      <View style={styles.planetCluster}>
+        {PLANETS.map((p, i) => (
+          <View
+            key={i}
+            style={[
+              styles.planet,
+              {
+                width: p.size,
+                height: p.size,
+                borderRadius: p.size / 2,
+                backgroundColor: p.color,
+                top: p.top,
+                right: p.right,
+              },
+            ]}
+          />
+        ))}
+      </View>
+    </TouchableOpacity>
+  );
 }
 
 export default function SoundsScreen() {
@@ -52,28 +95,16 @@ export default function SoundsScreen() {
   const [showRecordingModal, setShowRecordingModal] = useState(false);
   const [activeFilter, setActiveFilter] = useState<FilterLabel>('All');
 
-  const filteredSounds = useMemo(() => {
-    switch (activeFilter) {
-      case 'Nature':
-        return allSounds.filter(s => s.category === 'nature');
-      case 'Personal':
-        return allSounds.filter(s => s.isUserRecording);
-      default:
-        return allSounds;
-    }
-  }, [allSounds, activeFilter]);
+  const natureSounds = useMemo(
+    () => allSounds.filter(s => s.category === 'nature' && !s.isUserRecording),
+    [allSounds],
+  );
+  const personalSounds = useMemo(
+    () => allSounds.filter(s => s.isUserRecording),
+    [allSounds],
+  );
 
-  const gridData = useMemo(() => buildGridData(filteredSounds), [filteredSounds]);
-
-  const handlePillPress = useCallback((label: string) => {
-    if (label === 'Space') {
-      router.push('/solar-system');
-      return;
-    }
-    setActiveFilter(label as FilterLabel);
-  }, []);
-
-  const renderItem = useCallback(
+  const renderGridItem = useCallback(
     ({ item }: { item: GridItem }) => {
       if ('isEmpty' in item && item.isEmpty) {
         return <View style={styles.emptyCell} />;
@@ -104,6 +135,58 @@ export default function SoundsScreen() {
     [allActive, allVolumes, handleToggle, handleSetVolume],
   );
 
+  // Manual grid renderer for use inside ScrollView (avoids nested VirtualizedList warning)
+  const renderManualGrid = useCallback(
+    (sounds: SoundDef[], withAdd: boolean, prefix: string) => {
+      const items = buildGrid(sounds, withAdd, prefix);
+      const rows: GridItem[][] = [];
+      for (let i = 0; i < items.length; i += 3) {
+        rows.push(items.slice(i, i + 3));
+      }
+      return (
+        <View style={styles.manualGrid}>
+          {rows.map((row, ri) => (
+            <View key={ri} style={styles.gridRow}>
+              {row.map(item => (
+                <View key={item.id} style={styles.gridCell}>
+                  {renderGridItem({ item })}
+                </View>
+              ))}
+            </View>
+          ))}
+        </View>
+      );
+    },
+    [renderGridItem],
+  );
+
+  const handlePillPress = useCallback((pill: string) => {
+    if (pill === 'Space') {
+      router.push('/solar-system');
+      return;
+    }
+    if (pill === '+') {
+      setActiveFilter('Personal');
+      return;
+    }
+    setActiveFilter(pill as FilterLabel);
+  }, []);
+
+  const pills = ['All', 'Nature', 'Space', '+'] as const;
+
+  const isPillActive = (pill: string): boolean => {
+    if (pill === 'Space') return false;
+    if (pill === '+') return activeFilter === 'Personal';
+    return activeFilter === pill;
+  };
+
+  // For the single-filter FlatList views (Nature / Personal)
+  const singleFilterData = useMemo(() => {
+    if (activeFilter === 'Nature') return buildGrid(natureSounds, false, 'n');
+    if (activeFilter === 'Personal') return buildGrid(personalSounds, true, 'p');
+    return [];
+  }, [activeFilter, natureSounds, personalSounds]);
+
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
       <View style={styles.topBar}>
@@ -111,36 +194,62 @@ export default function SoundsScreen() {
       </View>
       <Text style={styles.heading}>Sound Mixer</Text>
 
+      {/* Pills: All | Nature | Space | + */}
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={styles.pillsRow}
         style={styles.pillsScroll}
       >
-        {FILTER_LABELS.map(label => {
-          const isActive = activeFilter === label && label !== 'Space';
+        {pills.map(pill => {
+          const active = isPillActive(pill);
           return (
             <TouchableOpacity
-              key={label}
-              style={[styles.pill, isActive && styles.pillActive]}
-              onPress={() => handlePillPress(label)}
+              key={pill}
+              style={[styles.pill, active && styles.pillActive]}
+              onPress={() => handlePillPress(pill)}
               activeOpacity={0.75}
             >
-              <Text style={[styles.pillText, isActive && styles.pillTextActive]}>{label}</Text>
+              <Text style={[styles.pillText, active && styles.pillTextActive]}>{pill}</Text>
             </TouchableOpacity>
           );
         })}
       </ScrollView>
 
-      <FlatList
-        data={gridData}
-        keyExtractor={item => item.id}
-        numColumns={3}
-        renderItem={renderItem}
-        contentContainerStyle={styles.grid}
-        showsVerticalScrollIndicator={false}
-        style={styles.list}
-      />
+      {/* All tab — sectioned ScrollView */}
+      {activeFilter === 'All' && (
+        <ScrollView
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={styles.allTabContent}
+        >
+          <Text style={styles.sectionLabel}>NATURE</Text>
+          {renderManualGrid(natureSounds, false, 'n')}
+
+          <Text style={styles.sectionLabel}>SOLAR SYSTEM</Text>
+          <SolarCard />
+
+          <Text style={styles.sectionLabel}>PERSONAL</Text>
+          {renderManualGrid(personalSounds, true, 'p')}
+        </ScrollView>
+      )}
+
+      {/* Nature / Personal single-section FlatList */}
+      {activeFilter !== 'All' && (
+        <FlatList
+          data={singleFilterData}
+          keyExtractor={item => item.id}
+          numColumns={3}
+          renderItem={renderGridItem}
+          contentContainerStyle={styles.grid}
+          showsVerticalScrollIndicator={false}
+          style={styles.list}
+          ListHeaderComponent={
+            <Text style={styles.sectionLabel}>
+              {activeFilter === 'Nature' ? 'NATURE SOUNDS' : 'PERSONAL'}
+            </Text>
+          }
+        />
+      )}
 
       <View style={styles.timerArea} />
       <BottomNav />
@@ -221,6 +330,29 @@ const styles = StyleSheet.create({
   pillTextActive: {
     color: colors.textPrimary,
   },
+  sectionLabel: {
+    color: colors.textSecondary,
+    fontSize: 11,
+    fontWeight: '400',
+    letterSpacing: 2,
+    textTransform: 'uppercase',
+    opacity: 0.5,
+    paddingHorizontal: 14,
+    paddingTop: 8,
+    paddingBottom: 8,
+  },
+  allTabContent: {
+    paddingBottom: 16,
+  },
+  manualGrid: {
+    paddingHorizontal: 10,
+  },
+  gridRow: {
+    flexDirection: 'row',
+  },
+  gridCell: {
+    flex: 1,
+  },
   list: {
     flex: 1,
   },
@@ -247,5 +379,69 @@ const styles = StyleSheet.create({
   },
   timerArea: {
     height: 4,
+  },
+  solarCard: {
+    marginHorizontal: 10,
+    marginBottom: 4,
+    borderRadius: 18,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.accentPurple,
+    padding: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    overflow: 'hidden',
+    shadowColor: colors.accentPurple,
+    shadowOpacity: 0.25,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 5,
+  },
+  solarTextBlock: {
+    flex: 1,
+  },
+  solarLabel: {
+    color: colors.accentBlue,
+    fontSize: 9,
+    fontWeight: '600',
+    letterSpacing: 1.5,
+    marginBottom: 5,
+    textTransform: 'uppercase',
+  },
+  solarTitle: {
+    color: colors.textPrimary,
+    fontSize: 17,
+    fontWeight: '700',
+    marginBottom: 3,
+  },
+  solarSubtitle: {
+    color: colors.textSecondary,
+    fontSize: 11,
+    fontWeight: '400',
+    marginBottom: 10,
+  },
+  solarBadge: {
+    alignSelf: 'flex-start',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 20,
+    backgroundColor: colors.accentPurple,
+    borderWidth: 1,
+    borderColor: colors.accentBlue,
+  },
+  solarBadgeText: {
+    color: colors.textSecondary,
+    fontSize: 10,
+    fontWeight: '500',
+  },
+  planetCluster: {
+    width: 72,
+    height: 56,
+    position: 'relative',
+    marginLeft: 8,
+  },
+  planet: {
+    position: 'absolute',
+    opacity: 0.9,
   },
 });

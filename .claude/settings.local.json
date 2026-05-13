@@ -22,7 +22,9 @@
       "Bash(python3 *)",
       "Bash(npm info *)",
       "Bash(npm view *)",
-      "Bash(grep -v \"^\\\\.\\\\.$\")"
+      "Bash(grep -v \"^\\\\.\\\\.$\")",
+      "Bash(git *)",
+      "Bash(grep -E \"\\\\.\\(md|json|js|ts\\)$\")"
     ]
   }
 }

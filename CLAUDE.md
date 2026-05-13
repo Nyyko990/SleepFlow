@@ -23,7 +23,7 @@ No test suite is configured yet.
 
 ### Routing
 
-Uses **Expo Router** (file-based routing inside `app/`). `app/_layout.tsx` is the root Stack navigator with `headerShown: false` and `StatusBar style="light"`. `app/index.tsx` is the home screen (`/`). `app/solar-system.tsx` is the Solar System bundle screen. New screens go in `app/` as files.
+Uses **Expo Router** (file-based routing inside `app/`). `app/_layout.tsx` is the root Stack navigator with `headerShown: false` and `StatusBar style="light"` — it wraps the Stack with `<AudioProvider>` so audio state is shared across all screens. `app/index.tsx` is the home screen (`/`). `app/solar-system.tsx` is the Solar System bundle screen. `app/sounds.tsx` is a dedicated Sound Mixer screen (accessed from BottomNav). New screens go in `app/` as files.
 
 `App.js` and `index.js` are legacy stubs — do not modify them. The actual entry is `expo-router/entry` (set in `package.json` `main`).
 
@@ -78,7 +78,7 @@ Two parallel hooks manage audio — both share the same fade/volume patterns but
 
 **`hooks/useRecordingPlayer.ts`** — manages user recordings stored as URI-based `expo-audio` `AudioPlayer` instances (via `createAudioPlayer`). Persists `RecordingMeta[]` (id, name, filePath, createdAt) to AsyncStorage under `user_recordings`. Files are copied to `FileSystem.documentDirectory + 'recordings/'` on save using timestamp-based IDs (`rec_${Date.now()}.m4a`). Exposes the same `{ active, volumes, toggle, setVolume }` shape plus `{ recordings, soundDefs, addRecording, deleteRecording }`. `soundDefs` is a derived `SoundDef[]` with `isUserRecording: true` and `icon: 'mic-outline'`. `deleteRecording` stops, unloads, deletes the file, and removes both the storage entry and the volume key — full cleanup in one call.
 
-**Home screen state merge** (`app/index.tsx`): both hooks run in parallel; their `active`/`volumes` maps are spread-merged and their `toggle`/`setVolume` are dispatched to the correct hook by checking which map contains the id.
+**`context/AudioContext.tsx`** — React context that combines `useSoundPlayer` + `useRecordingPlayer` into a single `AudioProvider`. Exposes `{ allSounds, allActive, allVolumes, handleToggle, handleSetVolume, isReady, recordings, addRecording, deleteRecording }` via `useAudio()`. Mounted at the root in `_layout.tsx` — consume via `useAudio()` instead of calling the hooks directly in screens. The home and sounds screens both use this context; `solar-system.tsx` still runs its own `useSoundPlayer(SOLAR_SOUNDS)` instance independently.
 
 ### `SoundDef` type (`constants/sounds.ts`)
 
@@ -101,22 +101,34 @@ interface SoundDef {
 
 ### Grid layout
 
-The home screen `FlatList` (3 columns) is built from `buildGridData(allSounds)` which appends a `{ id: '__add' }` add-button item and then pads to a multiple of 3 with `isEmpty` spacers. `renderItem` switches on `item.id === '__add'` and `'isEmpty' in item` before rendering a `SoundCard`. The `FlatList` uses `ListHeaderComponent` to place `<FeaturedBanner />` and a section label above the grid.
+The home screen `FlatList` (3 columns) is built from `buildGridData(allSounds)` which appends a `{ id: '__add' }` add-button item and then pads to a multiple of 3 with `isEmpty` spacers. `renderItem` switches on `item.id === '__add'` and `'isEmpty' in item` before rendering a `SoundCard`. The `FlatList` uses `ListHeaderComponent` to place `<FeaturedBanner />`, a **Favorites row**, and section label above the grid.
 
-Filter pills (`All`, `Nature`, `Space`, `Personal`) sit in a horizontal `ScrollView` above the grid. `Space` is not a filter — it navigates to `/solar-system` via `router.push`. The others set `activeFilter` state which filters `allSounds` before passing to `buildGridData`.
+**Favorites**: Users heart-tap any sound card to favorite it; IDs saved to AsyncStorage under `favorite_sounds`. The Favorites row above the grid shows favorited sounds as a horizontal list — tap to play, long-press to open modal. Shows "Hold any sound to favorite it ♡" placeholder when empty.
+
+**Discover section**: Three discovery cards below the grid link to Breathing, Sleep Stories, and Solar System screens.
+
+Filter pills (`All`, `Nature`, `Space`, `Personal`) sit in a horizontal `ScrollView` above the grid. `Space` is not a filter — it loads `SOLAR_SOUNDS` into the grid inline (using a separate `useSoundPlayer(SOLAR_SOUNDS)` instance) rather than navigating away. The others set `activeFilter` state which filters `allSounds` before passing to `buildGridData`.
 
 ### Components
 
-- **`SoundCard`** — `memo`-wrapped; wraps `<Slider>` in `<View onStartShouldSetResponder>` to prevent drag events from bubbling. Renders optional `subtitle` below the name. Tap = toggle, long-press (400 ms) = open modal.
+- **`SoundCard`** — `memo`-wrapped; wraps `<Slider>` in `<View onStartShouldSetResponder>` to prevent drag events from bubbling. Renders optional `subtitle` below the name. Tap = toggle, long-press (400 ms) = open modal. Shows a heart icon (top-right) when `onFavoriteToggle` prop is provided — filled pink (`#E8688A`) when favorited, muted when not.
 - **`SoundModal`** — full-screen overlay; receives `sounds: SoundDef[]` as prop (not hardcoded). Left/right nav cycles through the list. Shows `subtitle` and an info button (ⓘ) when `description` is present — tapping reveals a scrollable mythology card with opacity animation. Shows a trash-icon delete button when `sound.isUserRecording && onDelete` is provided; calls `onDelete(id)` then `onClose()`.
 - **`RecordingModal`** — `Modal`-based (not an absolute-fill overlay). Three internal modes: `choose` (Record / Import File), `record` (live 00:00 timer, red stop button), `preview` (play/pause + name `TextInput` + Save/Discard). Uses `useAudioRecorder` from `expo-audio` for mic capture, `expo-document-picker` for file import. On save, delegates file copy to `useRecordingPlayer.addRecording`. On iOS, `Audio.Recording.getURI()` returns a temporary URI that's invalidated after the recording is unloaded — the save flow copies it to a persistent path immediately; don't delay this copy. Recording name is capped at `MAX_NAME_LENGTH = 50` characters (enforced on every keystroke). Imported files are validated against `ALLOWED_AUDIO_EXTENSIONS` (mp3, m4a, aac, wav, ogg, flac, opus, aiff, wma) — invalid files show an `Alert` before dismissing. Preview playback uses `useAudioPlayerStatus` + `didJustFinish` to auto-pause when playback completes naturally.
 - **`FeaturedBanner`** — tappable card above the grid; calls `router.push('/solar-system')`. Purple-accented (`accentPurple` border + left stripe).
 - **`LoadingScreen`** — absolute-fill splash shown while `useSoundPlayer.isReady === false`. Fades out over 600 ms. Internally runs several looping `Animated` animations in parallel: star twinkling (staggered per-star timers), constellation line opacity, cloud parallax drift, and a moon breathing pulse — all via `Animated.loop(Animated.sequence([...]))`.
-- **`BottomNav`** — persistent tab bar rendered at the bottom of every main screen. Four tabs: `/` (sounds), `/breathe`, `/stories`, `/timer`. Uses `usePathname` to highlight the active tab with `colors.tabActive` and a small dot indicator. Navigates via `router.replace` (not `push`) to avoid stacking screens.
+- **`BottomNav`** — persistent tab bar rendered at the bottom of every main screen. Five tabs: `/` (home), `/sounds` (mixer), `/breathe`, `/stories`, `/timer`. Uses `usePathname` to highlight the active tab with `colors.tabActive` and a small dot indicator. Navigates via `router.replace` (not `push`) to avoid stacking screens.
+
+### Breathe screen (`app/breathe.tsx`)
+
+Fully implemented breathing exercise screen with 4 selectable techniques: **4-7-8**, **Box Breathing**, **Diaphragmatic**, and **2:1 Breathing**. Each has a description card with clinical info. Animation: an `Animated.timing`-driven circle expands on inhale and contracts on exhale; a rotating progress ring wraps it. Live countdown shows seconds remaining in the current phase; a cycle counter tracks progress (`TOTAL_CYCLES = 4`). Phases are color-coded (blue inhale, purple hold, dark blue exhale). Controls: Start / Stop / Try Again. Completion shows "Well done. Your body is ready to sleep. 🌙".
+
+### Sounds screen (`app/sounds.tsx`)
+
+Dedicated Sound Mixer tab (`/sounds`). Mirrors the home screen's sound grid exactly — same `buildGridData()`, same filter pills (All / Nature / Space / Personal), same `useAudio()` context, same `SoundModal` and `RecordingModal` wiring. The Space filter spawns a separate `useSoundPlayer(SOLAR_SOUNDS)` instance inline. Exists as a dedicated tab so the mixer is always one tap away regardless of what content the home screen shows in future phases.
 
 ### Stub screens
 
-`app/breathe.tsx`, `app/stories.tsx`, and `app/timer.tsx` are placeholder screens ("Coming soon") wired into `BottomNav`. Each follows the same pattern: `useSafeAreaInsets` for top padding, centered text, and `<BottomNav />` at the bottom. Implement content inside the `content` View.
+`app/stories.tsx` and `app/timer.tsx` are placeholder screens ("Coming soon") wired into `BottomNav`. Each follows the same pattern: `useSafeAreaInsets` for top padding, centered text, and `<BottomNav />` at the bottom. Implement content inside the `content` View.
 
 ### Solar System screen (`app/solar-system.tsx`)
 
@@ -141,3 +153,4 @@ Non-fatal errors in hooks use `console.warn('[SleepFlow] ...')` — the `[SleepF
 - Orientation is locked to portrait (`app.json`).
 - The home screen `timerArea` View (`height: 4`) sits between the grid and `BottomNav` — leave it in place as a Phase 2 hook point.
 - New main screens must include `<BottomNav />` and respect `useSafeAreaInsets` for top padding (no global layout wrapper exists).
+- New screens that need audio should consume `useAudio()` from `context/AudioContext.tsx`, not call the raw hooks directly.
