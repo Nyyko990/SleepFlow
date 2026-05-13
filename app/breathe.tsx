@@ -1,6 +1,7 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Animated,
+  Modal,
   ScrollView,
   StyleSheet,
   Text,
@@ -8,6 +9,7 @@ import {
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Ionicons } from '@expo/vector-icons';
 import { colors } from '../constants/colors';
 import { BottomNav } from '../components/BottomNav';
 
@@ -22,7 +24,10 @@ interface Phase {
 interface Technique {
   id: string;
   label: string;
+  tagline: string;
+  timing: string;
   description: string;
+  bestFor: string[];
   phases: Phase[];
 }
 
@@ -30,8 +35,11 @@ const TECHNIQUES: Technique[] = [
   {
     id: '4-7-8',
     label: '4-7-8',
+    tagline: 'SLEEP FASTER',
+    timing: '4 · 7 · 8',
     description:
       'Developed by Dr. Andrew Weil. Activates the parasympathetic nervous system, reducing heart rate and cortisol.',
+    bestFor: ['Anxiety before sleep', 'Racing thoughts', 'Falling asleep faster'],
     phases: [
       { name: 'Inhale', duration: 4, type: 'inhale' },
       { name: 'Hold', duration: 7, type: 'hold' },
@@ -40,9 +48,12 @@ const TECHNIQUES: Technique[] = [
   },
   {
     id: 'box',
-    label: 'Box Breathing',
+    label: 'Box',
+    tagline: 'CALM THE MIND',
+    timing: '4 · 4 · 4 · 4',
     description:
       'Used by Navy SEALs to manage stress. Balances CO₂ and O₂ levels, inducing calm within minutes.',
+    bestFor: ['Stress and overthinking', 'Work/study recovery', 'Calming the nervous system'],
     phases: [
       { name: 'Inhale', duration: 4, type: 'inhale' },
       { name: 'Hold', duration: 4, type: 'hold' },
@@ -52,9 +63,12 @@ const TECHNIQUES: Technique[] = [
   },
   {
     id: 'diaphragmatic',
-    label: 'Diaphragmatic',
+    label: 'Diaphragm',
+    tagline: 'REDUCE DISTURBANCES',
+    timing: '4 · 8',
     description:
       'A 2021 clinical study found this reduces sleep latency and nighttime disturbances significantly.',
+    bestFor: ['Light sleepers', 'Nighttime disturbances', 'General sleep quality'],
     phases: [
       { name: 'Inhale', duration: 4, type: 'inhale' },
       { name: 'Exhale', duration: 8, type: 'exhale' },
@@ -62,9 +76,12 @@ const TECHNIQUES: Technique[] = [
   },
   {
     id: '2-1',
-    label: '2:1 Breathing',
+    label: '2:1',
+    tagline: 'ACTIVATE REST',
+    timing: '4 · 8',
     description:
       'The extended exhale activates the vagus nerve, shifting the body from fight-or-flight to rest-and-digest.',
+    bestFor: ['General relaxation', 'Transitioning to sleep', 'Slowing heart rate'],
     phases: [
       { name: 'Inhale', duration: 4, type: 'inhale' },
       { name: 'Exhale', duration: 8, type: 'exhale' },
@@ -72,21 +89,36 @@ const TECHNIQUES: Technique[] = [
   },
 ];
 
-const PHASE_COLORS: Record<PhaseType, string> = {
-  inhale: '#2D5986',
-  hold: '#2D1B4E',
-  exhale: '#1A3A5C',
+const PHASE_DOT_COLORS: Record<PhaseType, string> = {
+  inhale: '#4A7CB5',
+  hold: '#6B4FA0',
+  exhale: '#3A7A9C',
 };
 
 const TOTAL_CYCLES = 4;
 const BASE_SIZE = 180;
 const MAX_SIZE = 240;
-// borderRadius must always exceed half of BASE_SIZE (90). Using MAX_SIZE/2 = 120 satisfies this.
-const CIRCLE_RADIUS = MAX_SIZE / 2;
-// Outer progress ring — fits around the circle at MAX_SIZE with some margin
 const RING_SIZE = MAX_SIZE + 52;
 const RING_RADIUS = RING_SIZE / 2;
 const DOT_SIZE = 10;
+
+interface ParticleLayer {
+  scale: number;
+  opacity: number;
+  color: string;
+  borderTopLeftRadius: number;
+  borderTopRightRadius: number;
+  borderBottomRightRadius: number;
+  borderBottomLeftRadius: number;
+}
+
+const PARTICLE_LAYERS: ParticleLayer[] = [
+  { scale: 1.00, opacity: 0.08, color: '#1A2A3A', borderTopLeftRadius: 118, borderTopRightRadius: 122, borderBottomRightRadius: 120, borderBottomLeftRadius: 116 },
+  { scale: 0.86, opacity: 0.07, color: '#162436', borderTopLeftRadius: 124, borderTopRightRadius: 118, borderBottomRightRadius: 122, borderBottomLeftRadius: 120 },
+  { scale: 0.72, opacity: 0.06, color: '#0D1B2A', borderTopLeftRadius: 117, borderTopRightRadius: 120, borderBottomRightRadius: 115, borderBottomLeftRadius: 122 },
+  { scale: 0.58, opacity: 0.05, color: '#162436', borderTopLeftRadius: 121, borderTopRightRadius: 117, borderBottomRightRadius: 119, borderBottomLeftRadius: 123 },
+  { scale: 0.42, opacity: 0.04, color: '#1A2A3A', borderTopLeftRadius: 119, borderTopRightRadius: 123, borderBottomRightRadius: 118, borderBottomLeftRadius: 120 },
+];
 
 export default function BreatheScreen() {
   const insets = useSafeAreaInsets();
@@ -97,9 +129,15 @@ export default function BreatheScreen() {
   const [countdown, setCountdown] = useState(0);
   const [cycleCount, setCycleCount] = useState(0);
   const [completed, setCompleted] = useState(false);
+  const [infoIdx, setInfoIdx] = useState<number | null>(null);
 
   const circleAnim = useRef(new Animated.Value(BASE_SIZE)).current;
   const progressRotation = useRef(new Animated.Value(0)).current;
+
+  const layerAnims = useMemo(
+    () => PARTICLE_LAYERS.map(l => Animated.multiply(circleAnim, l.scale)),
+    [circleAnim],
+  );
 
   const tickRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const isRunningRef = useRef(false);
@@ -241,8 +279,10 @@ export default function BreatheScreen() {
   });
 
   const currentPhase = technique.phases[phaseIdx] ?? technique.phases[0];
-  const phaseColor = isRunning ? PHASE_COLORS[currentPhase.type] : colors.accentBlue;
+  const dotColor = isRunning ? PHASE_DOT_COLORS[currentPhase.type] : colors.accentBlue;
   const displayPhaseText = isRunning ? currentPhase.name : 'Ready';
+
+  const infoTech = infoIdx !== null ? TECHNIQUES[infoIdx] : null;
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
@@ -256,7 +296,7 @@ export default function BreatheScreen() {
         </View>
         <Text style={styles.heading}>Breathe</Text>
 
-        {/* Technique selector */}
+        {/* Technique cards — long press opens info modal */}
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
@@ -266,58 +306,59 @@ export default function BreatheScreen() {
           {TECHNIQUES.map((t, i) => (
             <TouchableOpacity
               key={t.id}
-              style={[styles.techPill, selectedTech === i && styles.techPillActive]}
+              style={[styles.techCard, selectedTech === i && styles.techCardActive]}
               onPress={() => handleTechChange(i)}
+              onLongPress={() => setInfoIdx(i)}
+              delayLongPress={400}
               activeOpacity={0.75}
             >
-              <Text style={[styles.techPillText, selectedTech === i && styles.techPillTextActive]}>
+              <Text style={[styles.techCardLabel, selectedTech === i && styles.techCardLabelActive]}>
                 {t.label}
               </Text>
+              <Text style={styles.techCardTagline}>{t.tagline}</Text>
+              <Text style={styles.techCardTiming}>{t.timing}</Text>
+              <Text style={styles.techCardDesc} numberOfLines={2}>{t.description}</Text>
             </TouchableOpacity>
           ))}
         </ScrollView>
 
-        {/* Description card */}
-        <View style={styles.descCard}>
-          <Text style={styles.descText} numberOfLines={2}>
-            {technique.description}
-          </Text>
-        </View>
+        {/* Phase label ABOVE circle */}
+        <Text style={styles.phaseLabel}>{displayPhaseText}</Text>
 
-        {/* Circle area */}
+        {/* Circle area — particle aura layers */}
         <View style={styles.circleArea}>
-          {/* Background ring */}
           <View style={styles.progressRing} />
 
-          {/* Rotating progress dot */}
           <Animated.View
             style={[
               styles.progressDotContainer,
               { transform: [{ rotate: progressSpin }] },
             ]}
           >
-            <View style={[styles.progressDot, { backgroundColor: phaseColor }]} />
+            <View style={[styles.progressDot, { backgroundColor: dotColor }]} />
           </Animated.View>
 
-          {/* Breathing circle */}
-          <Animated.View
-            style={[
-              styles.circle,
-              {
-                width: circleAnim,
-                height: circleAnim,
-                backgroundColor: phaseColor,
-              },
-            ]}
-          >
-            <Text style={styles.phaseText}>{displayPhaseText}</Text>
-          </Animated.View>
+          {PARTICLE_LAYERS.map((layer, i) => (
+            <Animated.View
+              key={i}
+              style={{
+                position: 'absolute',
+                width: layerAnims[i],
+                height: layerAnims[i],
+                backgroundColor: layer.color,
+                opacity: layer.opacity,
+                borderTopLeftRadius: layer.borderTopLeftRadius,
+                borderTopRightRadius: layer.borderTopRightRadius,
+                borderBottomRightRadius: layer.borderBottomRightRadius,
+                borderBottomLeftRadius: layer.borderBottomLeftRadius,
+              }}
+            />
+          ))}
         </View>
 
         {/* Countdown */}
         <Text style={styles.countdown}>{isRunning && countdown > 0 ? String(countdown) : ' '}</Text>
 
-        {/* Cycle counter / completion */}
         {isRunning && !completed && (
           <Text style={styles.cycleText}>
             Cycle {cycleCount + 1} of {TOTAL_CYCLES}
@@ -332,7 +373,6 @@ export default function BreatheScreen() {
 
         {!isRunning && !completed && <View style={styles.cycleTextPlaceholder} />}
 
-        {/* Controls */}
         <View style={styles.controls}>
           {completed ? (
             <TouchableOpacity style={styles.startBtn} onPress={handleReset} activeOpacity={0.8}>
@@ -351,6 +391,46 @@ export default function BreatheScreen() {
       </ScrollView>
 
       <BottomNav />
+
+      {/* Technique info modal */}
+      <Modal
+        visible={infoIdx !== null}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setInfoIdx(null)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalCard}>
+            <TouchableOpacity
+              style={styles.modalClose}
+              onPress={() => setInfoIdx(null)}
+              activeOpacity={0.7}
+              hitSlop={8}
+            >
+              <Ionicons name="close" size={20} color={colors.textSecondary} />
+            </TouchableOpacity>
+
+            {infoTech !== null && (
+              <>
+                <Text style={styles.modalTitle}>{infoTech.label}</Text>
+                <Text style={styles.modalTiming}>{infoTech.timing}</Text>
+                <Text style={styles.modalTagline}>{infoTech.tagline}</Text>
+                <Text style={styles.modalDesc}>{infoTech.description}</Text>
+
+                <View style={styles.modalDivider} />
+
+                <Text style={styles.modalBestForLabel}>Best for</Text>
+                {infoTech.bestFor.map((point, j) => (
+                  <View key={j} style={styles.modalBulletRow}>
+                    <View style={styles.modalBulletDot} />
+                    <Text style={styles.modalBulletText}>{point}</Text>
+                  </View>
+                ))}
+              </>
+            )}
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -387,46 +467,66 @@ const styles = StyleSheet.create({
   },
   techScroll: {
     flexGrow: 0,
-    marginBottom: 14,
+    marginBottom: 28,
   },
   techRow: {
     paddingHorizontal: 14,
-    gap: 8,
+    gap: 10,
   },
-  techPill: {
-    paddingHorizontal: 16,
-    paddingVertical: 6,
-    borderRadius: 20,
+  techCard: {
+    width: 160,
+    borderRadius: 16,
+    backgroundColor: colors.surface,
     borderWidth: 1,
     borderColor: colors.border,
-    backgroundColor: 'transparent',
+    padding: 14,
+    gap: 4,
   },
-  techPillActive: {
-    backgroundColor: colors.pillActive,
+  techCardActive: {
     borderColor: colors.accentBlue,
+    backgroundColor: colors.surfaceActive,
   },
-  techPillText: {
+  techCardLabel: {
     color: colors.textSecondary,
-    fontSize: 13,
-    fontWeight: '400',
+    fontSize: 16,
+    fontWeight: '700',
+    letterSpacing: 0.3,
+    marginBottom: 2,
   },
-  techPillTextActive: {
+  techCardLabelActive: {
     color: colors.textPrimary,
   },
-  descCard: {
-    marginHorizontal: 14,
-    marginBottom: 24,
-    backgroundColor: colors.surface,
-    borderRadius: 12,
-    padding: 14,
-    borderWidth: 1,
-    borderColor: colors.border,
+  techCardTagline: {
+    color: colors.accentBlue,
+    fontSize: 9,
+    fontWeight: '600',
+    letterSpacing: 1,
+    marginBottom: 2,
   },
-  descText: {
+  techCardTiming: {
     color: colors.textSecondary,
     fontSize: 12,
-    lineHeight: 18,
-    opacity: 0.8,
+    fontWeight: '500',
+    letterSpacing: 1,
+    opacity: 0.7,
+    marginBottom: 6,
+  },
+  techCardDesc: {
+    color: colors.textSecondary,
+    fontSize: 11,
+    lineHeight: 16,
+    opacity: 0.5,
+  },
+  phaseLabel: {
+    color: colors.textSecondary,
+    fontSize: 16,
+    fontWeight: '300',
+    letterSpacing: 4,
+    textTransform: 'uppercase',
+    textAlign: 'center',
+    marginBottom: 16,
+    height: 24,
+    opacity: 0.6,
   },
   circleArea: {
     width: RING_SIZE,
@@ -454,22 +554,6 @@ const styles = StyleSheet.create({
     height: DOT_SIZE,
     borderRadius: DOT_SIZE / 2,
     marginTop: -(DOT_SIZE / 2),
-  },
-  circle: {
-    borderRadius: CIRCLE_RADIUS,
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowRadius: 24,
-    shadowOpacity: 0.35,
-    shadowOffset: { width: 0, height: 0 },
-    shadowColor: colors.accentBlue,
-    elevation: 8,
-  },
-  phaseText: {
-    color: colors.textPrimary,
-    fontSize: 16,
-    fontWeight: '400',
-    letterSpacing: 0.5,
   },
   countdown: {
     color: colors.textSecondary,
@@ -520,5 +604,95 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '600',
     letterSpacing: 0.5,
+  },
+  // Info modal
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.75)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 24,
+  },
+  modalCard: {
+    width: '100%',
+    backgroundColor: colors.surface,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: 24,
+    shadowColor: '#000',
+    shadowOpacity: 0.5,
+    shadowRadius: 20,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 12,
+  },
+  modalClose: {
+    position: 'absolute',
+    top: 16,
+    right: 16,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: colors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  modalTitle: {
+    color: colors.textPrimary,
+    fontSize: 22,
+    fontWeight: '700',
+    marginBottom: 4,
+  },
+  modalTiming: {
+    color: colors.textSecondary,
+    fontSize: 13,
+    letterSpacing: 2,
+    fontWeight: '500',
+    marginBottom: 6,
+    opacity: 0.7,
+  },
+  modalTagline: {
+    color: colors.accentBlue,
+    fontSize: 10,
+    fontWeight: '600',
+    letterSpacing: 1.5,
+    marginBottom: 14,
+  },
+  modalDesc: {
+    color: colors.textSecondary,
+    fontSize: 13,
+    lineHeight: 20,
+    opacity: 0.8,
+  },
+  modalDivider: {
+    height: 1,
+    backgroundColor: colors.border,
+    marginVertical: 18,
+  },
+  modalBestForLabel: {
+    color: colors.textPrimary,
+    fontSize: 13,
+    fontWeight: '600',
+    letterSpacing: 0.5,
+    marginBottom: 10,
+    opacity: 0.9,
+  },
+  modalBulletRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginBottom: 8,
+  },
+  modalBulletDot: {
+    width: 5,
+    height: 5,
+    borderRadius: 2.5,
+    backgroundColor: colors.accentBlue,
+    opacity: 0.8,
+  },
+  modalBulletText: {
+    color: colors.textSecondary,
+    fontSize: 13,
+    opacity: 0.75,
   },
 });

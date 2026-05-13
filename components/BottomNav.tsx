@@ -7,9 +7,9 @@ import { colors } from '../constants/colors';
 import type { IoniconName } from '../constants/sounds';
 
 const TABS: { path: string; icon: IoniconName; activeIcon: IoniconName }[] = [
-  { path: '/', icon: 'home-outline', activeIcon: 'home' },
   { path: '/sounds', icon: 'volume-medium-outline', activeIcon: 'volume-medium' },
   { path: '/breathe', icon: 'leaf-outline', activeIcon: 'leaf' },
+  { path: '/', icon: 'home-outline', activeIcon: 'home' },
   { path: '/stories', icon: 'book-outline', activeIcon: 'book' },
   { path: '/timer', icon: 'timer-outline', activeIcon: 'timer' },
 ];
