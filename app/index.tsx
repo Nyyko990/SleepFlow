@@ -1,12 +1,16 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Animated,
+  Dimensions,
   ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
 } from 'react-native';
+
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
+const BUNDLE_CARD_W = SCREEN_WIDTH - 24;
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
@@ -112,14 +116,55 @@ export default function HomeScreen() {
         {/* Header */}
         <View style={styles.topBar}>
           <Text style={styles.brand}>SLEEPFLOW</Text>
-          <TouchableOpacity style={styles.settingsBtn} activeOpacity={0.7} hitSlop={8}>
-            <Ionicons name="settings-outline" size={18} color={colors.textSecondary} />
-          </TouchableOpacity>
+          <View style={styles.topActions}>
+            <TouchableOpacity
+              style={styles.settingsBtn}
+              onPress={() => router.push('/shop' as '/')}
+              activeOpacity={0.7}
+              hitSlop={8}
+            >
+              <Ionicons name="storefront-outline" size={18} color={colors.textSecondary} />
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.settingsBtn} activeOpacity={0.7} hitSlop={8}>
+              <Ionicons name="settings-outline" size={18} color={colors.textSecondary} />
+            </TouchableOpacity>
+          </View>
         </View>
         <Text style={styles.greeting}>Good night</Text>
 
-        {/* Featured Banner */}
-        <FeaturedBanner />
+        {/* Featured Bundles */}
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          snapToInterval={SCREEN_WIDTH}
+          decelerationRate="fast"
+          contentContainerStyle={styles.bundlesScroll}
+        >
+          <View style={{ width: SCREEN_WIDTH }}>
+            <FeaturedBanner bundleWidth={BUNDLE_CARD_W} />
+          </View>
+          <View style={{ width: SCREEN_WIDTH }}>
+            <TouchableOpacity
+              style={styles.fantasyBanner}
+              activeOpacity={0.82}
+              onPress={() => router.push('/stories' as '/')}
+            >
+              <View style={styles.fantasyTextBlock}>
+                <Text style={styles.fantasyLabel}>FEATURED BUNDLE</Text>
+                <Text style={styles.fantasyTitle}>Fantasy Worlds</Text>
+                <Text style={styles.fantasySubtitle}>Epic tales to carry you into sleep</Text>
+                <View style={styles.fantasyBadge}>
+                  <Text style={styles.fantasyBadgeText}>3 stories · $2.99</Text>
+                </View>
+              </View>
+              <View style={styles.fantasyIconCluster}>
+                <Ionicons name="moon-outline" size={22} color="#8888A0" style={{ opacity: 0.7, marginBottom: 4 }} />
+                <Ionicons name="planet-outline" size={26} color="#6B4FA0" style={{ opacity: 0.85 }} />
+                <Ionicons name="flame-outline" size={18} color="#D4A843" style={{ opacity: 0.7, marginTop: 4 }} />
+              </View>
+            </TouchableOpacity>
+          </View>
+        </ScrollView>
 
         {/* FAVORITES */}
         <Text style={styles.sectionLabel}>FAVORITES</Text>
@@ -294,6 +339,10 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
     opacity: 0.7,
   },
+  topActions: {
+    flexDirection: 'row',
+    gap: 8,
+  },
   settingsBtn: {
     width: 32,
     height: 32,
@@ -303,6 +352,68 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  bundlesScroll: {
+    // no extra padding; each child is SCREEN_WIDTH wide
+  },
+  fantasyBanner: {
+    marginHorizontal: 12,
+    marginBottom: 10,
+    borderRadius: 18,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.accentPurple,
+    padding: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    overflow: 'hidden',
+    shadowColor: '#6B4FA0',
+    shadowOpacity: 0.25,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 5,
+  },
+  fantasyTextBlock: {
+    flex: 1,
+  },
+  fantasyLabel: {
+    color: colors.accentBlue,
+    fontSize: 9,
+    fontWeight: '600',
+    letterSpacing: 1.5,
+    marginBottom: 5,
+    textTransform: 'uppercase',
+  },
+  fantasyTitle: {
+    color: colors.textPrimary,
+    fontSize: 17,
+    fontWeight: '700',
+    marginBottom: 3,
+  },
+  fantasySubtitle: {
+    color: colors.textSecondary,
+    fontSize: 11,
+    fontWeight: '400',
+    marginBottom: 10,
+  },
+  fantasyBadge: {
+    alignSelf: 'flex-start',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 20,
+    backgroundColor: colors.accentPurple,
+    borderWidth: 1,
+    borderColor: colors.accentBlue,
+  },
+  fantasyBadgeText: {
+    color: colors.textSecondary,
+    fontSize: 10,
+    fontWeight: '500',
+  },
+  fantasyIconCluster: {
+    width: 48,
+    alignItems: 'center',
+    marginLeft: 8,
   },
   greeting: {
     color: colors.textPrimary,

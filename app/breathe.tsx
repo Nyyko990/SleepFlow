@@ -131,120 +131,106 @@ export default function BreatheScreen() {
   const [completed, setCompleted] = useState(false);
   const [infoIdx, setInfoIdx] = useState<number | null>(null);
 
+  // phaseProgress: animates from 0 → phase.duration (seconds) over phase.duration * 1000ms.
+  // A listener derives the countdown; its interpolation drives the arc dot.
+  // Both share the exact same Animated.timing — perfectly in sync.
+  const phaseProgress = useRef(new Animated.Value(0)).current;
   const circleAnim = useRef(new Animated.Value(BASE_SIZE)).current;
-  const progressRotation = useRef(new Animated.Value(0)).current;
 
   const layerAnims = useMemo(
     () => PARTICLE_LAYERS.map(l => Animated.multiply(circleAnim, l.scale)),
     [circleAnim],
   );
 
-  const tickRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const isRunningRef = useRef(false);
-  const sessionRef = useRef<{ phaseIdx: number; countdown: number; cycleCount: number } | null>(
-    null,
-  );
+  const sessionActiveRef = useRef(false);
+
+  // runPhaseRef is reassigned each render so the callback always closes over
+  // the latest setState dispatchers and sessionActiveRef value.
+  const runPhaseRef = useRef<((idx: number, phases: Phase[], cyclesDone: number) => void) | null>(null);
+
+  runPhaseRef.current = (idx: number, phases: Phase[], cyclesDone: number) => {
+    if (!sessionActiveRef.current) return;
+
+    const ph = phases[idx];
+
+    phaseProgress.removeAllListeners();
+    phaseProgress.setValue(0);
+    setPhaseIdx(idx);
+    setCountdown(ph.duration);
+
+    // Listener derives countdown from the same value driving the arc
+    phaseProgress.addListener(({ value }) => {
+      setCountdown(Math.max(0, Math.ceil(ph.duration - value)));
+    });
+
+    // Single Animated.timing drives both arc rotation and countdown
+    Animated.timing(phaseProgress, {
+      toValue: ph.duration,
+      duration: ph.duration * 1000,
+      useNativeDriver: false,
+    }).start(({ finished }) => {
+      if (!finished || !sessionActiveRef.current) return;
+      phaseProgress.removeAllListeners();
+
+      const nextIdx = (idx + 1) % phases.length;
+      const newCyclesDone = nextIdx === 0 ? cyclesDone + 1 : cyclesDone;
+
+      if (nextIdx === 0) {
+        setCycleCount(newCyclesDone);
+        if (newCyclesDone >= TOTAL_CYCLES) {
+          sessionActiveRef.current = false;
+          setIsRunning(false);
+          setCompleted(true);
+          return;
+        }
+      }
+
+      runPhaseRef.current!(nextIdx, phases, newCyclesDone);
+    });
+
+    // Circle animation runs in lockstep with the same duration
+    circleAnim.stopAnimation();
+    if (ph.type === 'inhale') {
+      Animated.timing(circleAnim, {
+        toValue: MAX_SIZE,
+        duration: ph.duration * 1000,
+        useNativeDriver: false,
+      }).start();
+    } else if (ph.type === 'exhale') {
+      Animated.timing(circleAnim, {
+        toValue: BASE_SIZE,
+        duration: ph.duration * 1000,
+        useNativeDriver: false,
+      }).start();
+    }
+    // hold: circle stays at current size, arc keeps rotating
+  };
 
   const technique = TECHNIQUES[selectedTech];
 
-  const animatePhase = useCallback(
-    (idx: number, phases: Phase[]) => {
-      const ph = phases[idx];
-      const toSize = ph.type === 'inhale' ? MAX_SIZE : ph.type === 'exhale' ? BASE_SIZE : null;
-      if (toSize !== null) {
-        Animated.timing(circleAnim, {
-          toValue: toSize,
-          duration: ph.duration * 1000,
-          useNativeDriver: false,
-        }).start();
-      }
-    },
-    [circleAnim],
-  );
-
-  const startProgressAnim = useCallback(
-    (phases: Phase[]) => {
-      const totalDur = phases.reduce((s, p) => s + p.duration, 0);
-      progressRotation.setValue(0);
-      Animated.timing(progressRotation, {
-        toValue: 1,
-        duration: totalDur * 1000,
-        useNativeDriver: true,
-      }).start();
-    },
-    [progressRotation],
-  );
+  const startSession = useCallback(() => {
+    const phases = technique.phases;
+    sessionActiveRef.current = true;
+    setIsRunning(true);
+    setCompleted(false);
+    setCycleCount(0);
+    circleAnim.setValue(BASE_SIZE);
+    runPhaseRef.current!(0, phases, 0);
+  }, [technique, circleAnim]);
 
   const stopSession = useCallback(() => {
-    if (tickRef.current) {
-      clearInterval(tickRef.current);
-      tickRef.current = null;
-    }
-    isRunningRef.current = false;
-    sessionRef.current = null;
+    sessionActiveRef.current = false;
+    phaseProgress.stopAnimation();
+    phaseProgress.removeAllListeners();
     circleAnim.stopAnimation();
-    progressRotation.stopAnimation();
     setIsRunning(false);
+    phaseProgress.setValue(0);
     Animated.timing(circleAnim, {
       toValue: BASE_SIZE,
       duration: 500,
       useNativeDriver: false,
     }).start();
-    progressRotation.setValue(0);
-  }, [circleAnim, progressRotation]);
-
-  const startSession = useCallback(() => {
-    const phases = technique.phases;
-    setCompleted(false);
-    setIsRunning(true);
-    setPhaseIdx(0);
-    setCountdown(phases[0].duration);
-    setCycleCount(0);
-
-    isRunningRef.current = true;
-    const session = { phaseIdx: 0, countdown: phases[0].duration, cycleCount: 0 };
-    sessionRef.current = session;
-
-    circleAnim.setValue(BASE_SIZE);
-    animatePhase(0, phases);
-    startProgressAnim(phases);
-
-    tickRef.current = setInterval(() => {
-      if (!isRunningRef.current || !sessionRef.current) return;
-
-      sessionRef.current.countdown -= 1;
-      setCountdown(sessionRef.current.countdown);
-
-      if (sessionRef.current.countdown <= 0) {
-        const nextIdx = (sessionRef.current.phaseIdx + 1) % phases.length;
-        const isNewCycle = nextIdx === 0;
-
-        if (isNewCycle) {
-          sessionRef.current.cycleCount += 1;
-          const newCount = sessionRef.current.cycleCount;
-          setCycleCount(newCount);
-
-          if (newCount >= TOTAL_CYCLES) {
-            clearInterval(tickRef.current!);
-            tickRef.current = null;
-            isRunningRef.current = false;
-            sessionRef.current = null;
-            setIsRunning(false);
-            setCompleted(true);
-            return;
-          }
-
-          startProgressAnim(phases);
-        }
-
-        sessionRef.current.phaseIdx = nextIdx;
-        sessionRef.current.countdown = phases[nextIdx].duration;
-        setPhaseIdx(nextIdx);
-        setCountdown(phases[nextIdx].duration);
-        animatePhase(nextIdx, phases);
-      }
-    }, 1000);
-  }, [technique, animatePhase, startProgressAnim, circleAnim]);
+  }, [phaseProgress, circleAnim]);
 
   const handleTechChange = useCallback(
     (idx: number) => {
@@ -264,21 +250,25 @@ export default function BreatheScreen() {
     setCountdown(0);
     setCycleCount(0);
     circleAnim.setValue(BASE_SIZE);
-    progressRotation.setValue(0);
-  }, [circleAnim, progressRotation]);
+    phaseProgress.setValue(0);
+  }, [circleAnim, phaseProgress]);
 
   useEffect(() => {
     return () => {
-      if (tickRef.current) clearInterval(tickRef.current);
+      sessionActiveRef.current = false;
+      phaseProgress.removeAllListeners();
     };
-  }, []);
+  }, [phaseProgress]);
 
-  const progressSpin = progressRotation.interpolate({
-    inputRange: [0, 1],
+  // Arc dot: interpolates from 0° to 360° over the current phase's duration.
+  // phaseProgress resets to 0 at the start of each phase, so the dot resets too.
+  const currentPhase = technique.phases[phaseIdx] ?? technique.phases[0];
+  const progressSpin = phaseProgress.interpolate({
+    inputRange: [0, currentPhase.duration],
     outputRange: ['0deg', '360deg'],
+    extrapolate: 'clamp',
   });
 
-  const currentPhase = technique.phases[phaseIdx] ?? technique.phases[0];
   const dotColor = isRunning ? PHASE_DOT_COLORS[currentPhase.type] : colors.accentBlue;
   const displayPhaseText = isRunning ? currentPhase.name : 'Ready';
 
@@ -325,10 +315,11 @@ export default function BreatheScreen() {
         {/* Phase label ABOVE circle */}
         <Text style={styles.phaseLabel}>{displayPhaseText}</Text>
 
-        {/* Circle area — particle aura layers */}
+        {/* Circle area */}
         <View style={styles.circleArea}>
           <View style={styles.progressRing} />
 
+          {/* Arc dot — driven by phaseProgress, in sync with countdown */}
           <Animated.View
             style={[
               styles.progressDotContainer,
@@ -338,6 +329,7 @@ export default function BreatheScreen() {
             <View style={[styles.progressDot, { backgroundColor: dotColor }]} />
           </Animated.View>
 
+          {/* Particle aura layers */}
           {PARTICLE_LAYERS.map((layer, i) => (
             <Animated.View
               key={i}
@@ -356,7 +348,6 @@ export default function BreatheScreen() {
           ))}
         </View>
 
-        {/* Countdown */}
         <Text style={styles.countdown}>{isRunning && countdown > 0 ? String(countdown) : ' '}</Text>
 
         {isRunning && !completed && (
@@ -605,7 +596,6 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     letterSpacing: 0.5,
   },
-  // Info modal
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.75)',

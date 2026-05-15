@@ -10,10 +10,10 @@ const PLANETS = [
   { size: 11, color: '#3A9E8F', top: 34, right: 10 },
 ] as const;
 
-export function FeaturedBanner() {
+export function FeaturedBanner({ bundleWidth }: { bundleWidth?: number }) {
   return (
     <TouchableOpacity
-      style={styles.banner}
+      style={[styles.banner, bundleWidth ? { width: bundleWidth, marginHorizontal: 0 } : {}]}
       activeOpacity={0.82}
       onPress={() => router.push('/solar-system')}
     >

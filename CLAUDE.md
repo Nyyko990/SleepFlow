@@ -78,7 +78,7 @@ Two parallel hooks manage audio — both share the same fade/volume patterns but
 
 **`hooks/useRecordingPlayer.ts`** — manages user recordings stored as URI-based `expo-audio` `AudioPlayer` instances (via `createAudioPlayer`). Persists `RecordingMeta[]` (id, name, filePath, createdAt) to AsyncStorage under `user_recordings`. Files are copied to `FileSystem.documentDirectory + 'recordings/'` on save using timestamp-based IDs (`rec_${Date.now()}.m4a`). Exposes the same `{ active, volumes, toggle, setVolume }` shape plus `{ recordings, soundDefs, addRecording, deleteRecording }`. `soundDefs` is a derived `SoundDef[]` with `isUserRecording: true` and `icon: 'mic-outline'`. `deleteRecording` stops, unloads, deletes the file, and removes both the storage entry and the volume key — full cleanup in one call.
 
-**`context/AudioContext.tsx`** — React context that combines `useSoundPlayer` + `useRecordingPlayer` into a single `AudioProvider`. Exposes `{ allSounds, allActive, allVolumes, handleToggle, handleSetVolume, isReady, recordings, addRecording, deleteRecording }` via `useAudio()`. Mounted at the root in `_layout.tsx` — consume via `useAudio()` instead of calling the hooks directly in screens. The home and sounds screens both use this context; `solar-system.tsx` still runs its own `useSoundPlayer(SOLAR_SOUNDS)` instance independently.
+**`context/AudioContext.tsx`** — React context that combines `useSoundPlayer` + `useRecordingPlayer` into a single `AudioProvider`. Exposes `{ allSounds, allActive, allVolumes, handleToggle, handleSetVolume, isReady, recordings, addRecording, deleteRecording, pauseAll, resumeAll }` via `useAudio()`. `pauseAll`/`resumeAll` fade all active sounds out/in — used by `stories.tsx` when a story starts/stops playback. Mounted at the root in `_layout.tsx` — consume via `useAudio()` instead of calling the hooks directly in screens. The home and sounds screens both use this context; `solar-system.tsx` still runs its own `useSoundPlayer(SOLAR_SOUNDS)` instance independently.
 
 ### `SoundDef` type (`constants/sounds.ts`)
 
@@ -105,7 +105,11 @@ The home screen `FlatList` (3 columns) is built from `buildGridData(allSounds)` 
 
 **Favorites**: Users heart-tap any sound card to favorite it; IDs saved to AsyncStorage under `favorite_sounds`. The Favorites row above the grid shows favorited sounds as a horizontal list — tap to play, long-press to open modal. Shows "Hold any sound to favorite it ♡" placeholder when empty.
 
-**Discover section**: Three discovery cards below the grid link to Breathing, Sleep Stories, and Solar System screens.
+**Featured Bundles carousel**: A horizontal snapping `ScrollView` (snapToInterval = screen width) sits above Favorites, containing the Solar System `FeaturedBanner` (card 1) and a Fantasy Worlds banner (card 2, navigates to `/stories`). Both cards are `SCREEN_WIDTH - 24` wide.
+
+**Header**: Two icon buttons in the top-right — `storefront-outline` (navigates to `/shop`) and `settings-outline` (currently no-op).
+
+**Discover section**: Three discovery cards link to Breathing, Sleep Stories, and Solar System screens. `SLEEP_COMBOS` (defined in `index.tsx`) is a static array of preset sound combination objects — each entry has a name, icon, and `sounds` array of `{ id, volume }` pairs.
 
 Filter pills (`All`, `Nature`, `Space`, `Personal`) sit in a horizontal `ScrollView` above the grid. `Space` is not a filter — it loads `SOLAR_SOUNDS` into the grid inline (using a separate `useSoundPlayer(SOLAR_SOUNDS)` instance) rather than navigating away. The others set `activeFilter` state which filters `allSounds` before passing to `buildGridData`.
 
@@ -114,7 +118,7 @@ Filter pills (`All`, `Nature`, `Space`, `Personal`) sit in a horizontal `ScrollV
 - **`SoundCard`** — `memo`-wrapped; wraps `<Slider>` in `<View onStartShouldSetResponder>` to prevent drag events from bubbling. Renders optional `subtitle` below the name. Tap = toggle, long-press (400 ms) = open modal. Shows a heart icon (top-right) when `onFavoriteToggle` prop is provided — filled pink (`#E8688A`) when favorited, muted when not.
 - **`SoundModal`** — full-screen overlay; receives `sounds: SoundDef[]` as prop (not hardcoded). Left/right nav cycles through the list. Shows `subtitle` and an info button (ⓘ) when `description` is present — tapping reveals a scrollable mythology card with opacity animation. Shows a trash-icon delete button when `sound.isUserRecording && onDelete` is provided; calls `onDelete(id)` then `onClose()`.
 - **`RecordingModal`** — `Modal`-based (not an absolute-fill overlay). Three internal modes: `choose` (Record / Import File), `record` (live 00:00 timer, red stop button), `preview` (play/pause + name `TextInput` + Save/Discard). Uses `useAudioRecorder` from `expo-audio` for mic capture, `expo-document-picker` for file import. On save, delegates file copy to `useRecordingPlayer.addRecording`. On iOS, `Audio.Recording.getURI()` returns a temporary URI that's invalidated after the recording is unloaded — the save flow copies it to a persistent path immediately; don't delay this copy. Recording name is capped at `MAX_NAME_LENGTH = 50` characters (enforced on every keystroke). Imported files are validated against `ALLOWED_AUDIO_EXTENSIONS` (mp3, m4a, aac, wav, ogg, flac, opus, aiff, wma) — invalid files show an `Alert` before dismissing. Preview playback uses `useAudioPlayerStatus` + `didJustFinish` to auto-pause when playback completes naturally.
-- **`FeaturedBanner`** — tappable card above the grid; calls `router.push('/solar-system')`. Purple-accented (`accentPurple` border + left stripe).
+- **`FeaturedBanner`** — tappable card linking to `/solar-system`. Purple-accented (`accentPurple` border). Accepts optional `bundleWidth?: number` prop — when provided, overrides `marginHorizontal` so the card fits correctly inside a horizontal `ScrollView` alongside other bundle cards.
 - **`LoadingScreen`** — absolute-fill splash shown while `useSoundPlayer.isReady === false`. Fades out over 600 ms. Internally runs several looping `Animated` animations in parallel: star twinkling (staggered per-star timers), constellation line opacity, cloud parallax drift, and a moon breathing pulse — all via `Animated.loop(Animated.sequence([...]))`.
 - **`BottomNav`** — persistent tab bar rendered at the bottom of every main screen. Five tabs: `/` (home), `/sounds` (mixer), `/breathe`, `/stories`, `/timer`. Uses `usePathname` to highlight the active tab with `colors.tabActive` and a small dot indicator. Navigates via `router.replace` (not `push`) to avoid stacking screens.
 
@@ -126,9 +130,30 @@ Fully implemented breathing exercise screen with 4 selectable techniques: **4-7-
 
 Dedicated Sound Mixer tab (`/sounds`). Mirrors the home screen's sound grid exactly — same `buildGridData()`, same filter pills (All / Nature / Space / Personal), same `useAudio()` context, same `SoundModal` and `RecordingModal` wiring. The Space filter spawns a separate `useSoundPlayer(SOLAR_SOUNDS)` instance inline. Exists as a dedicated tab so the mixer is always one tap away regardless of what content the home screen shows in future phases.
 
+### Sleep Stories screen (`app/stories.tsx`)
+
+Two story rows, each a horizontal Netflix-style scroll:
+
+- **FREE STORIES** — 3 hand-crafted stories (Crystal Forest, Floating Library, Moon Garden). `Story` objects carry `durationMin`/`durationSecs`, full narrative text, icon, and `iconColor`.
+- **FANTASY WORLDS** — 3 premium stories (Journey of Wukong, Dragon's Search, Ember Night). Same `Story` shape plus `isPremium: true`, `price: string`, and optional `disclaimer` (shown on the card for fan works). Tapping a premium card shows `PurchaseModal` instead of opening the player — purchase is a placeholder (no real IAP yet).
+
+The player panel slides up via `Animated.spring` over the story list. Two modes, toggled by header pills:
+
+- **Listen mode** — play/pause, ±15 s skip, progress bar (driven by `setInterval` at `speed` Hz), speed selector (0.75×–1.5×), "Mix with sounds" toggle (`pauseAll`/`resumeAll`). Static decorative elements (stars, crescent moon, cloud shapes) overlay the panel background via `StyleSheet.absoluteFill` + `pointerEvents="none"`. Audio narration not yet wired (`TODO: add narrated audio file`).
+- **Read mode** — thin reading-progress bar, full-text `ScrollView`. **Guide feature**: a "Guide OFF/ON" pill in the header activates guided reading. When ON, two sub-mode pills appear:
+  - *Auto-scroll*: `setInterval` calls `scrollTo` by 30 px per tick; speed 1–5 controls the interval (`GUIDE_SPEED_INTERVALS = [3000, 1800, 1400, 1100, 800]` ms). Tap anywhere on the text to pause/resume.
+  - *Word by word*: renders text as nested `<Text onPress>` spans; an interval increments `highlightedWordIdx` (highlighted in `colors.tabActive` + bold). Tapping a word jumps to it.
+  - A 🐢/🐇 `Slider` controls speed for both sub-modes.
+
+An informational card ("Why stories help you sleep") with ✦-prefixed stat pills sits above the rows. `PanelDecorations` (stars, crescent moon, soft clouds) is rendered inside both the listen panel and the read container.
+
+### Shop screen (`app/shop.tsx`)
+
+Premium store at `/shop`. Navigated to from the `storefront-outline` button in the home screen header. Layout: back button + SLEEPFLOW/Premium header, full-width featured bundle card (Fantasy Worlds, $2.99), then a 2-column grid of individual items (4 items: 3 story unlocks + Solar System Sounds). All "Buy" / "Buy Bundle" buttons are placeholders — tapping shows `Alert("Coming soon!")`. Includes `<BottomNav />` at the bottom.
+
 ### Stub screens
 
-`app/stories.tsx` and `app/timer.tsx` are placeholder screens ("Coming soon") wired into `BottomNav`. Each follows the same pattern: `useSafeAreaInsets` for top padding, centered text, and `<BottomNav />` at the bottom. Implement content inside the `content` View.
+`app/timer.tsx` is a placeholder screen ("Coming soon") wired into `BottomNav`. Follows the same pattern as other screens: `useSafeAreaInsets` for top padding, centered text, and `<BottomNav />` at the bottom. Implement content inside the `content` View.
 
 ### Solar System screen (`app/solar-system.tsx`)
 
