@@ -1,4 +1,4 @@
-import React, { createContext, useCallback, useContext, useMemo } from 'react';
+import React, { createContext, useCallback, useContext, useMemo, useRef } from 'react';
 import { useSoundPlayer } from '../hooks/useSoundPlayer';
 import { useRecordingPlayer, type RecordingMeta } from '../hooks/useRecordingPlayer';
 import { SOUNDS, type SoundDef } from '../constants/sounds';
@@ -14,6 +14,8 @@ interface AudioContextValue {
   recSoundDefs: SoundDef[];
   addRecording: (name: string, uri: string) => Promise<void>;
   deleteRecording: (id: string) => Promise<void>;
+  pauseAll: () => void;
+  resumeAll: () => void;
 }
 
 const AudioContext = createContext<AudioContextValue | null>(null);
@@ -35,6 +37,10 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
   const allActive = useMemo(() => ({ ...active, ...recActive }), [active, recActive]);
   const allVolumes = useMemo(() => ({ ...volumes, ...recVolumes }), [volumes, recVolumes]);
 
+  const allActiveRef = useRef(allActive);
+  allActiveRef.current = allActive;
+  const pausedIdsRef = useRef<string[]>([]);
+
   const handleToggle = useCallback(
     (id: string) => {
       if (recActive[id] !== undefined) recToggle(id);
@@ -51,6 +57,18 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
     [recVolumes, recSetVolume, setVolume],
   );
 
+  const pauseAll = useCallback(() => {
+    const ids = Object.keys(allActiveRef.current).filter(id => allActiveRef.current[id]);
+    pausedIdsRef.current = ids;
+    ids.forEach(handleToggle);
+  }, [handleToggle]);
+
+  const resumeAll = useCallback(() => {
+    const ids = pausedIdsRef.current;
+    pausedIdsRef.current = [];
+    ids.forEach(handleToggle);
+  }, [handleToggle]);
+
   const value = useMemo(
     () => ({
       allSounds,
@@ -63,6 +81,8 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
       recSoundDefs,
       addRecording,
       deleteRecording,
+      pauseAll,
+      resumeAll,
     }),
     [
       allSounds,
@@ -75,6 +95,8 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
       recSoundDefs,
       addRecording,
       deleteRecording,
+      pauseAll,
+      resumeAll,
     ],
   );
 
