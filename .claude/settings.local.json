@@ -14,7 +14,17 @@
       "Bash(cmd /c \"rmdir /s /q C:\\\\Users\\\\nykom\\\\SleepFlow\\\\node_modules\\\\expo\")",
       "Bash(kill %1)",
       "Bash(node *)",
-      "Bash(npm start *)"
+      "Bash(npm start *)",
+      "Bash(npx tsc *)",
+      "WebFetch(domain:docs.expo.dev)",
+      "WebSearch",
+      "Bash(npm uninstall *)",
+      "Bash(python3 *)",
+      "Bash(npm info *)",
+      "Bash(npm view *)",
+      "Bash(grep -v \"^\\\\.\\\\.$\")",
+      "Bash(git *)",
+      "Bash(grep -E \"\\\\.\\(md|json|js|ts\\)$\")"
     ]
   }
 }
